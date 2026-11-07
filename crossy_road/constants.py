@@ -6,7 +6,7 @@ import pygame
 # -------------------------------------------------
 WIN_WIDTH = 640
 WIN_HEIGHT = 800
-FPS = 120
+FPS = 60
 
 # -------------------------------------------------
 #  World geometry
@@ -32,7 +32,7 @@ CAR_MAX_WIDTH = 180
 CAR_MIN_SPEED = 2
 CAR_MAX_SPEED = 8
 CAR_SPEED = 5                         # every standard car moves at this speed
-TRAFFIC_START_LANES_ABOVE_CAMERA = 3  # keep this many bottom rows clear of new traffic
+TRAFFIC_START_LANES_ABOVE_CAMERA = 4  # keep this many bottom rows clear of new traffic
 
 # -------------------------------------------------
 #  Trains
@@ -125,7 +125,7 @@ BIOMES = [
 #  Observation helper – how many lanes ahead we expose to the AI
 # -------------------------------------------------
 VIEW_LANES_AHEAD = 6
-SENSING_GRID_ROWS = 5
-SENSING_GRID_COLUMNS = 5
+SENSING_GRID_ROWS = 7
+SENSING_GRID_COLUMNS = 7
 SENSING_RADIUS_TILES = max(SENSING_GRID_ROWS, SENSING_GRID_COLUMNS) // 2
 SENSING_SIZE_TILES = SENSING_GRID_ROWS

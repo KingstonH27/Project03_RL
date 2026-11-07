@@ -30,26 +30,20 @@ _DIRECTION_NAMES = {
     "noop": Action.NOOP,
 }
 
-SENSING_GRID_CODES = {
-    0: "land",
-    1: "road",
-    2: "train_track",
-    3: "unknown_ground",
-    4: "car_on_land",
-    5: "car_on_road",
-    6: "car_on_train_track",
-    7: "car_on_unknown_ground",
-    8: "train_on_land",
-    9: "train_on_road",
-    10: "train_on_train_track",
-    11: "train_on_unknown_ground",
-}
+SENSING_TILE_TYPES = (
+    "land",
+    "road_right",
+    "road_left",
+    "train_track_right",
+    "train_track_left",
+    "unknown_ground",
+)
+SENSING_VEHICLE_TYPES = ("car", "train")
 
 
 def get_player_data(env):
     """
-    Return the observation plus numeric player position
-    and a numeric sensing grid.
+    Return the observation plus player position, tile types, and vehicle presence.
     """
 
     observation = env.get_observation()
@@ -68,8 +62,15 @@ def get_player_data(env):
 
     nearby_obstacles = []
 
-    sensing_grid = [
-        [3 for _ in range(SENSING_GRID_COLUMNS)]
+    sensing_tiles = [
+        ["unknown_ground" for _ in range(SENSING_GRID_COLUMNS)]
+        for _ in range(SENSING_GRID_ROWS)
+    ]
+    sensing_vehicles = [
+        [
+            [False for _ in SENSING_VEHICLE_TYPES]
+            for _ in range(SENSING_GRID_COLUMNS)
+        ]
         for _ in range(SENSING_GRID_ROWS)
     ]
 
@@ -77,22 +78,26 @@ def get_player_data(env):
 
     for map_row in observation["map_rows"]:
         obstacle_type = map_row["obstacle_type"]
+        direction = map_row["direction"]
 
-        terrain_by_lane[map_row["lane"]] = (
-            1 if obstacle_type == "car"
-            else 2 if obstacle_type == "train"
-            else 0
-        )
+        if obstacle_type == "car":
+            tile_type = "road_right" if direction > 0 else "road_left"
+        elif obstacle_type == "train":
+            tile_type = "train_track_right" if direction > 0 else "train_track_left"
+        else:
+            tile_type = "land"
+
+        terrain_by_lane[map_row["lane"]] = tile_type
 
     for row in range(SENSING_GRID_ROWS):
         cell_top = grid_top - row * LANE_HEIGHT
         cell_bottom = cell_top - LANE_HEIGHT
 
         lane = int(((cell_top + cell_bottom) / 2) // LANE_HEIGHT)
-        terrain_code = terrain_by_lane.get(lane, 3)
+        tile_type = terrain_by_lane.get(lane, "unknown_ground")
 
         for column in range(SENSING_GRID_COLUMNS):
-            sensing_grid[row][column] = terrain_code
+            sensing_tiles[row][column] = tile_type
 
     for obstacle in observation["obstacles"]:
         obstacle_left = obstacle["world_x"]
@@ -127,11 +132,8 @@ def get_player_data(env):
                         and obstacle_bottom >= cell_bottom
                         and obstacle_top <= cell_top
                     ):
-                        vehicle_flag = (
-                            8 if obstacle["type"] == "train" else 4
-                        )
-
-                        sensing_grid[row][column] |= vehicle_flag
+                        vehicle_index = SENSING_VEHICLE_TYPES.index(obstacle["type"])
+                        sensing_vehicles[row][column][vehicle_index] = True
 
     # NEW: Convert position to a numeric list
     player_position = [
@@ -139,21 +141,15 @@ def get_player_data(env):
         player["world_y"]
     ]
 
-    # NEW: Flatten the sensing grid into 25 numeric values
-    sensing_grid = [
-        value
-        for row in sensing_grid
-        for value in row
-    ]
-
     return {
         **observation,
         "current_score": observation["score"],
         "player_position": player_position,
         "nearby_obstacles": nearby_obstacles,
-        "sensing_grid": sensing_grid,
-        "inputs": player_position + sensing_grid,
-        "sensing_grid_codes": SENSING_GRID_CODES,
+        "sensing_tiles": sensing_tiles,
+        "sensing_vehicles": sensing_vehicles,
+        "sensing_tile_types": SENSING_TILE_TYPES,
+        "sensing_vehicle_types": SENSING_VEHICLE_TYPES,
         "sensing_radius_tiles": SENSING_RADIUS_TILES,
         "sensing_size_tiles": SENSING_SIZE_TILES,
         "sensing_grid_rows": SENSING_GRID_ROWS,

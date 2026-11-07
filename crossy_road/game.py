@@ -58,9 +58,11 @@ class Game:
         self.reward = 0.0
         self.last_info = {}
         self.show_debug_grid = False
+        self.show_input_impacts = False
+        self.sensitivity_scroll = 0
 
         # Automatic AI update speed (actions per second)
-        self.ai_speed = 6
+        self.ai_speed = 4
         self.ai_enabled = True
         self.ai_last_update = pygame.time.get_ticks()
 
@@ -70,6 +72,9 @@ class Game:
         )
         self.step_button_rect = pygame.Rect(
             WIN_WIDTH - 280, WIN_HEIGHT - 48, 130, 36
+        )
+        self.impact_button_rect = pygame.Rect(
+            WIN_WIDTH - 420, WIN_HEIGHT - 48, 130, 36
         )
 
     # ------------------------------------------------------------------
@@ -118,12 +123,21 @@ class Game:
             self.show_debug_grid = not self.show_debug_grid
             return True
 
+        if self.impact_button_rect.collidepoint(position):
+            self.show_input_impacts = not self.show_input_impacts
+            self.sensitivity_scroll = 0
+            return True
+
         if self.step_button_rect.collidepoint(position):
             from .model import update
             update(self)
             return True
 
         return False
+
+    def scroll_sensitivity(self, amount):
+        if self.show_input_impacts:
+            self.sensitivity_scroll = max(0, self.sensitivity_scroll + amount)
 
     def auto_step(self):
         """Run one AI action whenever the configured interval has elapsed."""
@@ -142,7 +156,7 @@ class Game:
     # Debug grid
     # ------------------------------------------------------------------
 
-    def _draw_debug_grid(self):
+    def _draw_debug_grid(self, action_scores):
         grid = pygame.Surface((WIN_WIDTH, WIN_HEIGHT), pygame.SRCALPHA)
         grid_colour = (255, 255, 255, 100)
 
@@ -185,7 +199,147 @@ class Game:
         pygame.draw.rect(grid, (40, 220, 255, 35), sensing_area)
         pygame.draw.rect(grid, (40, 220, 255, 220), sensing_area, width=3)
 
+        from . import API
+
+        directions = (
+            (Action.LEFT, -LANE_HEIGHT, 0),
+            (Action.RIGHT, LANE_HEIGHT, 0),
+            (Action.UP, 0, LANE_HEIGHT),
+            (Action.DOWN, 0, -LANE_HEIGHT),
+        )
+        action_indices = {
+            action: index
+            for index, action in enumerate(API._DIRECTION_ACTIONS)
+        }
+        direction_scores = [
+            float(action_scores[action_indices[action]])
+            for action, _, _ in directions
+        ]
+        lowest_score = min(direction_scores)
+        score_range = max(direction_scores) - lowest_score
+
+        for action, dx, dy in directions:
+            score = float(action_scores[action_indices[action]])
+            badness = (
+                0.5
+                if score_range == 0
+                else (max(direction_scores) - score) / score_range
+            )
+            alpha = int(35 + badness * 170)
+            target_x = self.player.world_x + dx
+            target_y = self.player.world_y + dy
+            marker_x, marker_bottom = self.camera.world_to_screen(
+                target_x,
+                target_y
+            )
+            marker = pygame.Rect(
+                marker_x,
+                marker_bottom - LANE_HEIGHT,
+                LANE_HEIGHT,
+                LANE_HEIGHT
+            )
+            marker_surface = pygame.Surface(marker.size, pygame.SRCALPHA)
+            marker_surface.fill((255, 0, 0, alpha))
+            grid.blit(marker_surface, marker)
+
         self.screen.blit(grid, (0, 0))
+
+    def _draw_input_sensitivity_panel(
+        self,
+        sensitivities,
+        action_name,
+        tile_types,
+        vehicle_types,
+    ):
+        panel = pygame.Rect(8, 78, WIN_WIDTH - 16, WIN_HEIGHT - 158)
+        pygame.draw.rect(self.screen, (20, 20, 20), panel, border_radius=4)
+        pygame.draw.rect(self.screen, (110, 110, 110), panel, width=1, border_radius=4)
+
+        font = pygame.font.SysFont("monospace", 12)
+        title = font.render(
+            f"Input derivatives for {action_name}",
+            True,
+            (235, 235, 235)
+        )
+        self.screen.blit(title, (panel.x + 6, panel.y + 5))
+
+        instructions = font.render(
+            "Green raises Q; red lowers Q. Scroll to see all inputs.",
+            True,
+            (200, 200, 200)
+        )
+        self.screen.blit(instructions, (panel.x + 6, panel.y + 22))
+
+        entries = [
+            ("player_x", float(sensitivities[0])),
+            ("player_y", float(sensitivities[1])),
+        ]
+        tile_input_start = 2
+        vehicle_input_start = tile_input_start + (
+            SENSING_GRID_ROWS * SENSING_GRID_COLUMNS * len(tile_types)
+        )
+        for row in range(SENSING_GRID_ROWS):
+            for column in range(SENSING_GRID_COLUMNS):
+                cell_index = row * SENSING_GRID_COLUMNS + column
+                tile_start = tile_input_start + cell_index * len(tile_types)
+                for tile_index, tile_type in enumerate(tile_types):
+                    entries.append((
+                        f"tile[{row},{column}]={tile_type}",
+                        float(sensitivities[tile_start + tile_index])
+                    ))
+
+                vehicle_start = (
+                    vehicle_input_start
+                    + cell_index * len(vehicle_types)
+                )
+                for vehicle_index, vehicle_type in enumerate(vehicle_types):
+                    entries.append((
+                        f"vehicle[{row},{column}]={vehicle_type}",
+                        float(sensitivities[vehicle_start + vehicle_index])
+                    ))
+
+        entries.sort(key=lambda entry: abs(entry[1]), reverse=True)
+        row_height = 18
+        list_top = panel.y + 50
+        visible_rows = (panel.height - 58) // row_height
+        max_scroll = max(0, len(entries) - visible_rows)
+        max_impact = max(
+            (abs(value) for _, value in entries),
+            default=0.0
+        )
+        self.sensitivity_scroll = min(self.sensitivity_scroll, max_scroll)
+        visible_entries = entries[
+            self.sensitivity_scroll:self.sensitivity_scroll + visible_rows
+        ]
+
+        for row_index, (name, value) in enumerate(visible_entries):
+            strength = abs(value) / max_impact if max_impact else 0.0
+            if value > 0:
+                colour = (25, 65 + int(130 * strength), 45)
+            elif value < 0:
+                colour = (70 + int(140 * strength), 35, 35)
+            else:
+                colour = (55, 55, 55)
+
+            row_rect = pygame.Rect(
+                panel.x + 5,
+                list_top + row_index * row_height,
+                panel.width - 10,
+                row_height - 1
+            )
+            pygame.draw.rect(self.screen, colour, row_rect)
+            text = font.render(f"{name}: {value:.4f}", True, (245, 245, 245))
+            self.screen.blit(text, (row_rect.x + 4, row_rect.y + 1))
+
+        range_text = font.render(
+            f"{self.sensitivity_scroll + 1}-{self.sensitivity_scroll + len(visible_entries)} / {len(entries)}",
+            True,
+            (210, 210, 210)
+        )
+        self.screen.blit(
+            range_text,
+            (panel.right - range_text.get_width() - 8, panel.bottom - 20)
+        )
 
     # ------------------------------------------------------------------
     # Game step
@@ -220,6 +374,7 @@ class Game:
         # -------------------------------------------------
 
         action_applied = False
+        blocked_by_vehicle = False
 
         if dx != 0 or dy != 0:
             target_x = self.player.world_x + dx
@@ -245,6 +400,8 @@ class Game:
                     self.player.move(dx, dy)
                     action_applied = True
                     #print("[SOUND] hop")
+                else:
+                    blocked_by_vehicle = True
 
         # -------------------------------------------------
         # Update world
@@ -267,13 +424,15 @@ class Game:
         # -------------------------------------------------
 
         collided = False
-
         if self.player.alive:
-            if pygame.sprite.spritecollideany(
-                self.player,
-                self.lanes.all_obstacles
-            ):
-                collided = True
+            collided = blocked_by_vehicle or (
+                pygame.sprite.spritecollideany(
+                    self.player,
+                    self.lanes.all_obstacles
+                ) is not None
+            )
+
+            if collided:
 
                 #print("[SOUND] crash")
 
@@ -353,11 +512,27 @@ class Game:
         self.auto_step()
         self.screen.fill(BG_COLOR)
 
+        from . import model as ai_model
+
+        current_data = ai_model.API.get_player_data(self)
+        current_inputs = ai_model.getInputs(current_data)
+        action_scores = ai_model.model(current_inputs)
+        selected_action_index = max(
+            range(len(action_scores)),
+            key=lambda index: action_scores[index]
+        )
+        input_sensitivities = None
+        if self.show_input_impacts:
+            input_sensitivities = ai_model.input_sensitivities(
+                current_inputs,
+                selected_action_index
+            )
+
         # Background and traffic
         self.lanes.draw(self.screen, self.camera)
 
         if self.show_debug_grid:
-            self._draw_debug_grid()
+            self._draw_debug_grid(action_scores)
 
         # Player
         if self.player.alive:
@@ -372,6 +547,14 @@ class Game:
                 (255, 60, 190),
                 self.player.rect,
                 width=2
+            )
+
+        if self.show_input_impacts:
+            self._draw_input_sensitivity_panel(
+                input_sensitivities,
+                ai_model.API._DIRECTION_ACTIONS[selected_action_index].name,
+                ai_model.API.SENSING_TILE_TYPES,
+                ai_model.API.SENSING_VEHICLE_TYPES,
             )
 
         # HUD
@@ -399,8 +582,6 @@ class Game:
             centre=False
         )
 
-        from . import model as ai_model
-
         outputs_x = WIN_WIDTH - 250
         outputs_y = 78
         outputs_font = pygame.font.SysFont(None, 16)
@@ -414,7 +595,7 @@ class Game:
 
         for index, action in enumerate(ai_model.API._DIRECTION_ACTIONS):
             row = outputs_font.render(
-                f"{action.name}: {ai_model.q[index]:+.1f}",
+                f"{action.name}: {float(action_scores[index]):.4f}",
                 True,
                 (205, 205, 205)
             )
@@ -453,6 +634,31 @@ class Game:
             label,
             22,
             self.debug_button_rect.center
+        )
+
+        impact_colour = (
+            (45, 125, 75)
+            if self.show_input_impacts
+            else (65, 65, 65)
+        )
+        pygame.draw.rect(
+            self.screen,
+            impact_colour,
+            self.impact_button_rect,
+            border_radius=6
+        )
+        pygame.draw.rect(
+            self.screen,
+            (220, 220, 220),
+            self.impact_button_rect,
+            width=1,
+            border_radius=6
+        )
+        draw_text(
+            self.screen,
+            "Impact: ON" if self.show_input_impacts else "Impact: OFF",
+            20,
+            self.impact_button_rect.center
         )
 
         # Step button

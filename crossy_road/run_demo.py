@@ -28,6 +28,10 @@ def main():
                 running = False
                 break
 
+            if event.type == pygame.MOUSEWHEEL:
+                game.scroll_sensitivity(-event.y * 5)
+                continue
+
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 game.handle_click(event.pos)
                 continue

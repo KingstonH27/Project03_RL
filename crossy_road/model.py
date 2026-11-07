@@ -2,38 +2,54 @@ import random
 
 import numpy as np
 from . import API
-from .constants import SENSING_GRID_COLUMNS, SENSING_GRID_ROWS
+from .constants import (
+    LANE_HEIGHT,
+    SENSING_GRID_COLUMNS,
+    SENSING_GRID_ROWS,
+    WIN_WIDTH,
+)
 load = True
-learning_rate = 0.02
-gamma = 0.6
+learning_rate = 0.1
+gamma = 0.5
 done = 0
-exploration_rate = 0.5
+exploration_rate = 0.3
 REWARD_SCORE_INCREASE = 1
-REWARD_NO_PROGRESS = -2
-REWARD_DEATH = -200
+REWARD_NO_PROGRESS = -5
+REWARD_DEATH = -100
 
 def bellman(r,q):
     Q = r + gamma * max(q) * (1 - done)
     return Q, q
 
 POSITION_INPUTS = 2
-IL = POSITION_INPUTS + SENSING_GRID_ROWS * SENSING_GRID_COLUMNS
+SENSING_CELL_COUNT = SENSING_GRID_ROWS * SENSING_GRID_COLUMNS
+TILE_FEATURE_COUNT = len(API.SENSING_TILE_TYPES)
+VEHICLE_FEATURE_COUNT = len(API.SENSING_VEHICLE_TYPES)
+IL = POSITION_INPUTS + SENSING_CELL_COUNT * (
+    TILE_FEATURE_COUNT + VEHICLE_FEATURE_COUNT
+)
 inputs = np.zeros(IL)
 outputs = 5
 q = np.zeros(outputs)
 layers = 3
-neurons = 4
+neurons = 10
+LEAKY_RELU_SLOPE = 0.01
+MAX_GRADIENT_NORM = 1.0
+MAX_PARAMETER_MAGNITUDE = 5.0
+WEIGHT_DECIMALS = 6
 
 weights = [
-    np.random.rand(neurons, IL)
+    np.round(np.random.rand(neurons, IL) / IL, WEIGHT_DECIMALS)
 ]
 
 weights.extend([
-    np.random.rand(neurons, neurons)
+    np.round(np.random.rand(neurons, neurons) / neurons, WEIGHT_DECIMALS)
     for _ in range(layers - 2)
 ])
 
-weights.append(np.random.rand(outputs, neurons))
+weights.append(
+    np.round(np.random.rand(outputs, neurons) / neurons, WEIGHT_DECIMALS)
+)
 
 
 biases = [
@@ -46,6 +62,23 @@ biases.append(np.zeros(outputs))
 import os
 
 SAVE_FILE = "model_weights.npz"
+
+
+def _stabilize_parameters(values):
+    finite_values = np.nan_to_num(
+        values,
+        nan=0.0,
+        posinf=MAX_PARAMETER_MAGNITUDE,
+        neginf=-MAX_PARAMETER_MAGNITUDE,
+    )
+    bounded_values = np.clip(
+        finite_values,
+        -MAX_PARAMETER_MAGNITUDE,
+        MAX_PARAMETER_MAGNITUDE,
+    )
+    return np.round(bounded_values, WEIGHT_DECIMALS)
+
+
 def save_model():
     np.savez(
         SAVE_FILE,
@@ -58,13 +91,17 @@ def load_model():
     if os.path.exists(SAVE_FILE):
         data = np.load(SAVE_FILE)
 
-        if data["w0"].shape != weights[0].shape:
-            print("Saved model input shape differs from the sensing grid; using fresh weights.")
-            return
+        for index, (weight, bias) in enumerate(zip(weights, biases)):
+            if (
+                data[f"w{index}"].shape != weight.shape
+                or data[f"b{index}"].shape != bias.shape
+            ):
+                print("Saved model shape differs from this network; using fresh weights.")
+                return
 
         for i in range(len(weights)):
-            weights[i] = data[f"w{i}"]
-            biases[i] = data[f"b{i}"]
+            weights[i] = _stabilize_parameters(data[f"w{i}"])
+            biases[i] = _stabilize_parameters(data[f"b{i}"])
 
         print("Model loaded!")
     else:
@@ -77,11 +114,42 @@ if load:
     load_model()
 
 
+def _leaky_relu(values):
+    return np.where(values > 0, values, LEAKY_RELU_SLOPE * values)
+
+
+def _leaky_relu_derivative(activations):
+    return np.where(activations > 0, 1.0, LEAKY_RELU_SLOPE)
+
+
 def model(A,L=layers):
     for l in range(L):
         Z = weights[l] @ A + biases[l]
-        A = np.maximum(0,Z) if l < layers-1 else Z
+        A = _leaky_relu(Z) if l < layers-1 else Z
     return A
+
+
+def input_sensitivities(input_values, output_index):
+    activations = [np.asarray(input_values, dtype=float)]
+
+    for layer_index in range(layers):
+        Z = weights[layer_index] @ activations[-1] + biases[layer_index]
+        activation = (
+            _leaky_relu(Z)
+            if layer_index < layers - 1
+            else Z
+        )
+        activations.append(activation)
+
+    gradient = np.zeros(outputs)
+    gradient[output_index] = 1.0
+
+    for layer_index in range(layers - 1, -1, -1):
+        if layer_index < layers - 1:
+            gradient *= _leaky_relu_derivative(activations[layer_index + 1])
+        gradient = weights[layer_index].T @ gradient
+
+    return gradient
 
 
 # Derivatives:
@@ -93,7 +161,7 @@ def train(actual):  # CHANGED: Accept five target Q-values
     activations = [inputs]
     for l in range(layers):
         Z = weights[l] @ activations[-1] + biases[l]
-        A = np.maximum(0,Z) if l < layers-1 else Z
+        A = _leaky_relu(Z) if l < layers-1 else Z
         activations.append(A)
 
     predicted = model(inputs)
@@ -102,25 +170,78 @@ def train(actual):  # CHANGED: Accept five target Q-values
 
     # Backpropagation
     for l in range(layers - 1, -1, -1):
-        dZ = dL * (activations[l+1] > 0) if l < layers-1 else dL
+        dZ = (
+            dL * _leaky_relu_derivative(activations[l + 1])
+            if l < layers - 1
+            else dL
+        )
 
         dW[l] = np.outer(dZ, activations[l])
         dB[l] = dZ
 
         dL = weights[l].T @ dZ
 
-    # Update Weights:
+    gradients = dW + dB
+    for gradient in gradients:
+        np.nan_to_num(
+            gradient,
+            copy=False,
+            nan=0.0,
+            posinf=MAX_GRADIENT_NORM,
+            neginf=-MAX_GRADIENT_NORM,
+        )
+
+    max_gradient = max(
+        (float(np.max(np.abs(gradient))) for gradient in gradients),
+        default=0.0,
+    )
+    if max_gradient > 0.0:
+        scaled_norm = np.sqrt(sum(
+            np.sum((gradient / max_gradient) ** 2)
+            for gradient in gradients
+        ))
+        gradient_scale = min(
+            1.0,
+            (MAX_GRADIENT_NORM / max_gradient) / scaled_norm,
+        )
+    else:
+        gradient_scale = 1.0
+
     for l in range(layers):
-        weights[l] -= learning_rate * dW[l]
-        biases[l] -= learning_rate * dB[l]
+        weights[l] = _stabilize_parameters(
+            weights[l] - learning_rate * gradient_scale * dW[l]
+        )
+        biases[l] = _stabilize_parameters(
+            biases[l] - learning_rate * gradient_scale * dB[l]
+        )
 
     return model(inputs)
 
 
 def getInputs(data):
-    position = np.array(data["player_position"]).flatten()
-    sense = np.array(data["sensing_grid"]).flatten()
-    return np.concatenate((position, sense))
+    position = np.asarray(data["player_position"], dtype=float).flatten()
+    position[0] = np.clip(position[0] / WIN_WIDTH, 0.0, 1.0)
+    position[1] = np.clip(position[1] / (100 * LANE_HEIGHT), 0.0, 1.0)
+
+    tiles = np.asarray(data["sensing_tiles"]).reshape(-1)
+    tile_indices = {
+        tile_type: index
+        for index, tile_type in enumerate(API.SENSING_TILE_TYPES)
+    }
+    tile_features = np.zeros((SENSING_CELL_COUNT, TILE_FEATURE_COUNT))
+    for cell_index, tile_type in enumerate(tiles):
+        tile_features[cell_index, tile_indices[tile_type]] = 1.0
+
+    vehicle_features = np.asarray(
+        data["sensing_vehicles"],
+        dtype=float
+    ).reshape(SENSING_CELL_COUNT, VEHICLE_FEATURE_COUNT)
+
+    return np.concatenate((
+        position,
+        tile_features.flatten(),
+        vehicle_features.flatten(),
+    ))
 
 
 def getReward(data, score_before, step_info):
@@ -146,21 +267,18 @@ def update(env):
     #print("Inputs:", inputs.shape)
     #print("Weights:", weights[0].shape)
     #print("Player position:", np.array(data["player_position"]).shape)
-    #print("Sensing grid:", np.array(data["sensing_grid"]).shape)
+    #print("Sensing tiles:", np.array(data["sensing_tiles"]).shape)
+    #print("Sensing vehicles:", np.array(data["sensing_vehicles"]).shape)
 
     # Predict current Q-values
     q = model(inputs)
 
-    legal_action_indices = [
-        index
-        for index, candidate in enumerate(API._DIRECTION_ACTIONS)
-        if data["legal_actions"].get(candidate.name, False)
-    ]
+    action_indices = range(len(API._DIRECTION_ACTIONS))
 
     if random.random() < exploration_rate:
-        action = random.choice(legal_action_indices)
+        action = random.choice(action_indices)
     else:
-        action = max(legal_action_indices, key=lambda index: q[index])
+        action = max(action_indices, key=lambda index: q[index])
 
     # Execute action
     score_before = data["current_score"]
@@ -182,5 +300,6 @@ def update(env):
 
     # Update inputs
     inputs = next_inputs
+    q = model(inputs)
 
     return next_data

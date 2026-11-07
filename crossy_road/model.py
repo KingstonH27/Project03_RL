@@ -21,7 +21,7 @@ elif (
 else:
     DEVICE = torch.device("cpu")
     DEVICE_NAME = "CPU"
-load = True
+load = False
 learning_rate = 0.1
 gamma = 0.5
 done = 0

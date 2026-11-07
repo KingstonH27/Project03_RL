@@ -69,7 +69,7 @@ class Game:
         self.sensitivity_scroll = 0
 
         # AI updates per rendered game frame; 0.25 means one update every four frames.
-        self.ai_speed = 0.125
+        self.ai_speed = 0.125/2
         self.ai_enabled = True
         self.ai_step_accumulator = 0.0
 

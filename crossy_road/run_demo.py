@@ -2,6 +2,10 @@
 """
 run_demo.py – launch an interactive version of the Crossy‑Road demo.
 
+To run:
+cd /Users/27hurt/PycharmProjects/Project03_RL
+./.venv/bin/python -m crossy_road.run_demo
+
 The demo uses the same Game class that you will later import from the
 package, so the logic you develop for an AI agent works exactly the same
 as the manual play mode.

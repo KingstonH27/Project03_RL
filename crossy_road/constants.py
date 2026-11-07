@@ -6,7 +6,7 @@ import pygame
 # -------------------------------------------------
 WIN_WIDTH = 640
 WIN_HEIGHT = 800
-FPS = 60
+FPS = 120
 
 # -------------------------------------------------
 #  World geometry
@@ -125,5 +125,7 @@ BIOMES = [
 #  Observation helper – how many lanes ahead we expose to the AI
 # -------------------------------------------------
 VIEW_LANES_AHEAD = 6
-SENSING_RADIUS_TILES = 2
-SENSING_SIZE_TILES = 2 * SENSING_RADIUS_TILES + 1
+SENSING_GRID_ROWS = 5
+SENSING_GRID_COLUMNS = 5
+SENSING_RADIUS_TILES = max(SENSING_GRID_ROWS, SENSING_GRID_COLUMNS) // 2
+SENSING_SIZE_TILES = SENSING_GRID_ROWS

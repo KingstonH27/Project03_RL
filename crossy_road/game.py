@@ -11,8 +11,8 @@ from .constants import (
     BG_COLOR,
     MAX_LIVES,
     VIEW_LANES_AHEAD,
-    SENSING_RADIUS_TILES,
-    SENSING_SIZE_TILES,
+    SENSING_GRID_COLUMNS,
+    SENSING_GRID_ROWS,
 )
 from .camera import Camera
 from .entities import Player, Train
@@ -60,7 +60,7 @@ class Game:
         self.show_debug_grid = False
 
         # Automatic AI update speed (actions per second)
-        self.ai_speed = 20
+        self.ai_speed = 6
         self.ai_enabled = True
         self.ai_last_update = pygame.time.get_ticks()
 
@@ -164,21 +164,22 @@ class Game:
                 grid, grid_colour, (0, y), (WIN_WIDTH, y), 1
             )
 
-        half_size = SENSING_SIZE_TILES * LANE_HEIGHT / 2
+        half_width = SENSING_GRID_COLUMNS * LANE_HEIGHT / 2
+        half_height = SENSING_GRID_ROWS * LANE_HEIGHT / 2
 
         player_center_x = self.player.world_x + PLAYER_RENDER_SIZE / 2
         player_center_y = self.player.world_y + PLAYER_RENDER_SIZE / 2
 
         sensing_left, sensing_bottom = self.camera.world_to_screen(
-            player_center_x - half_size,
-            player_center_y - half_size,
+            player_center_x - half_width,
+            player_center_y - half_height,
         )
 
         sensing_area = pygame.Rect(
             sensing_left,
-            sensing_bottom - SENSING_SIZE_TILES * LANE_HEIGHT,
-            SENSING_SIZE_TILES * LANE_HEIGHT,
-            SENSING_SIZE_TILES * LANE_HEIGHT,
+            sensing_bottom - SENSING_GRID_ROWS * LANE_HEIGHT,
+            SENSING_GRID_COLUMNS * LANE_HEIGHT,
+            SENSING_GRID_ROWS * LANE_HEIGHT,
         )
 
         pygame.draw.rect(grid, (40, 220, 255, 35), sensing_area)
@@ -291,6 +292,12 @@ class Game:
                 # Reset camera
                 self.camera.offset_y = 0
 
+                # Generate a fresh map for the next run
+                self.lanes.reset()
+                self.lanes.ensure_rows_through(
+                    int((self.camera.offset_y + self.camera.height) // LANE_HEIGHT) + 3
+                )
+
                 # Update player screen position
                 self.player.update_screen_rect(self.camera)
 
@@ -391,6 +398,27 @@ class Game:
             (WIN_WIDTH - 280, 50),
             centre=False
         )
+
+        from . import model as ai_model
+
+        outputs_x = WIN_WIDTH - 250
+        outputs_y = 78
+        outputs_font = pygame.font.SysFont(None, 16)
+        outputs_panel = pygame.Rect(outputs_x, outputs_y, 242, 112)
+        pygame.draw.rect(self.screen, (20, 20, 20), outputs_panel, border_radius=4)
+        pygame.draw.rect(self.screen, (110, 110, 110), outputs_panel, width=1, border_radius=4)
+        self.screen.blit(
+            outputs_font.render("Action outputs", True, (235, 235, 235)),
+            (outputs_x + 7, outputs_y + 5)
+        )
+
+        for index, action in enumerate(ai_model.API._DIRECTION_ACTIONS):
+            row = outputs_font.render(
+                f"{action.name}: {ai_model.q[index]:+.1f}",
+                True,
+                (205, 205, 205)
+            )
+            self.screen.blit(row, (outputs_x + 7, outputs_y + 23 + index * 16))
 
         # Debug button
         button_colour = (

@@ -8,6 +8,8 @@ from crossy_road.constants import (
     LANE_HEIGHT,
     PLAYER_RENDER_SIZE,
     SENSING_RADIUS_TILES,
+    SENSING_GRID_COLUMNS,
+    SENSING_GRID_ROWS,
     SENSING_SIZE_TILES,
 )
 
@@ -47,27 +49,28 @@ SENSING_GRID_CODES = {
 def get_player_data(env):
     """
     Return the observation plus numeric player position
-    and a numeric 5x5 sensing grid.
+    and a numeric sensing grid.
     """
 
     observation = env.get_observation()
     player = observation["player"]
 
-    half_size = SENSING_SIZE_TILES * LANE_HEIGHT / 2
+    half_width = SENSING_GRID_COLUMNS * LANE_HEIGHT / 2
+    half_height = SENSING_GRID_ROWS * LANE_HEIGHT / 2
 
     player_center_x = player["world_x"] + PLAYER_RENDER_SIZE / 2
     player_center_y = player["world_y"] + PLAYER_RENDER_SIZE / 2
 
-    left = player_center_x - half_size
-    right = player_center_x + half_size
-    grid_top = player_center_y + half_size
-    grid_bottom = player_center_y - half_size
+    left = player_center_x - half_width
+    right = player_center_x + half_width
+    grid_top = player_center_y + half_height
+    grid_bottom = player_center_y - half_height
 
     nearby_obstacles = []
 
     sensing_grid = [
-        [3 for _ in range(SENSING_SIZE_TILES)]
-        for _ in range(SENSING_SIZE_TILES)
+        [3 for _ in range(SENSING_GRID_COLUMNS)]
+        for _ in range(SENSING_GRID_ROWS)
     ]
 
     terrain_by_lane = {}
@@ -81,14 +84,14 @@ def get_player_data(env):
             else 0
         )
 
-    for row in range(SENSING_SIZE_TILES):
+    for row in range(SENSING_GRID_ROWS):
         cell_top = grid_top - row * LANE_HEIGHT
         cell_bottom = cell_top - LANE_HEIGHT
 
         lane = int(((cell_top + cell_bottom) / 2) // LANE_HEIGHT)
         terrain_code = terrain_by_lane.get(lane, 3)
 
-        for column in range(SENSING_SIZE_TILES):
+        for column in range(SENSING_GRID_COLUMNS):
             sensing_grid[row][column] = terrain_code
 
     for obstacle in observation["obstacles"]:
@@ -110,11 +113,11 @@ def get_player_data(env):
                 "relative_y": obstacle["world_y"] - player["world_y"],
             })
 
-            for row in range(SENSING_SIZE_TILES):
+            for row in range(SENSING_GRID_ROWS):
                 cell_top = grid_top - row * LANE_HEIGHT
                 cell_bottom = cell_top - LANE_HEIGHT
 
-                for column in range(SENSING_SIZE_TILES):
+                for column in range(SENSING_GRID_COLUMNS):
                     cell_left = left + column * LANE_HEIGHT
                     cell_right = cell_left + LANE_HEIGHT
 
@@ -153,6 +156,8 @@ def get_player_data(env):
         "sensing_grid_codes": SENSING_GRID_CODES,
         "sensing_radius_tiles": SENSING_RADIUS_TILES,
         "sensing_size_tiles": SENSING_SIZE_TILES,
+        "sensing_grid_rows": SENSING_GRID_ROWS,
+        "sensing_grid_columns": SENSING_GRID_COLUMNS,
     }
 
 

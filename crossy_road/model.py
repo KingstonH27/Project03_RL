@@ -2,35 +2,38 @@ import random
 
 import numpy as np
 from . import API
-
-learning_rate = 0.01
-gamma = 0.1
+from .constants import SENSING_GRID_COLUMNS, SENSING_GRID_ROWS
+load = True
+learning_rate = 0.02
+gamma = 0.6
 done = 0
-exploration_rate = 0.1
-REWARD_SCORE_INCREASE = 100
-REWARD_NO_PROGRESS = -1
-REWARD_DEATH = -100
+exploration_rate = 0.5
+REWARD_SCORE_INCREASE = 1
+REWARD_NO_PROGRESS = -2
+REWARD_DEATH = -200
 
 def bellman(r,q):
     Q = r + gamma * max(q) * (1 - done)
     return Q, q
 
-IL = 27
+POSITION_INPUTS = 2
+IL = POSITION_INPUTS + SENSING_GRID_ROWS * SENSING_GRID_COLUMNS
 inputs = np.zeros(IL)
 outputs = 5
-layers = 2
+q = np.zeros(outputs)
+layers = 3
 neurons = 4
 
 weights = [
-    np.random.randn(neurons, IL)
+    np.random.rand(neurons, IL)
 ]
 
 weights.extend([
-    np.random.randn(neurons, neurons)
+    np.random.rand(neurons, neurons)
     for _ in range(layers - 2)
 ])
 
-weights.append(np.random.randn(outputs, neurons))
+weights.append(np.random.rand(outputs, neurons))
 
 
 biases = [
@@ -55,6 +58,10 @@ def load_model():
     if os.path.exists(SAVE_FILE):
         data = np.load(SAVE_FILE)
 
+        if data["w0"].shape != weights[0].shape:
+            print("Saved model input shape differs from the sensing grid; using fresh weights.")
+            return
+
         for i in range(len(weights)):
             weights[i] = data[f"w{i}"]
             biases[i] = data[f"b{i}"]
@@ -66,8 +73,8 @@ def load_model():
 
 
 
-
-load_model()
+if load:
+    load_model()
 
 
 def model(A,L=layers):

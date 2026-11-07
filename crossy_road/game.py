@@ -243,7 +243,7 @@ class Game:
                 if not blocked:
                     self.player.move(dx, dy)
                     action_applied = True
-                    print("[SOUND] hop")
+                    #print("[SOUND] hop")
 
         # -------------------------------------------------
         # Update world
@@ -274,7 +274,7 @@ class Game:
             ):
                 collided = True
 
-                print("[SOUND] crash")
+                #print("[SOUND] crash")
 
                 # Preserve high score
                 self.high_score = max(

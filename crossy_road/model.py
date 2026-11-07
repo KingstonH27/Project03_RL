@@ -7,6 +7,9 @@ learning_rate = 0.01
 gamma = 0.1
 done = 0
 exploration_rate = 0.1
+REWARD_SCORE_INCREASE = 100
+REWARD_NO_PROGRESS = -1
+REWARD_DEATH = -100
 
 def bellman(r,q):
     Q = r + gamma * max(q) * (1 - done)
@@ -15,8 +18,8 @@ def bellman(r,q):
 IL = 27
 inputs = np.zeros(IL)
 outputs = 5
-layers = 5
-neurons = 8
+layers = 2
+neurons = 4
 
 weights = [
     np.random.randn(neurons, IL)
@@ -113,8 +116,12 @@ def getInputs(data):
     return np.concatenate((position, sense))
 
 
-def getReward(data, score_before):
-    return 100 if data["current_score"] > score_before else -1
+def getReward(data, score_before, step_info):
+    if step_info.get("collision", False) or not data["player"]["alive"]:
+        return REWARD_DEATH
+    if data["current_score"] > score_before:
+        return REWARD_SCORE_INCREASE
+    return REWARD_NO_PROGRESS
 
 
 def getQ(reward, future_q, current_q, action):
@@ -129,10 +136,10 @@ def update(env):
     # Get current state
     data = API.get_player_data(env)
     inputs = np.array(getInputs(data))
-    print("Inputs:", inputs.shape)
-    print("Weights:", weights[0].shape)
-    print("Player position:", np.array(data["player_position"]).shape)
-    print("Sensing grid:", np.array(data["sensing_grid"]).shape)
+    #print("Inputs:", inputs.shape)
+    #print("Weights:", weights[0].shape)
+    #print("Player position:", np.array(data["player_position"]).shape)
+    #print("Sensing grid:", np.array(data["sensing_grid"]).shape)
 
     # Predict current Q-values
     q = model(inputs)
@@ -150,7 +157,7 @@ def update(env):
 
     # Execute action
     score_before = data["current_score"]
-    env.step(API._DIRECTION_ACTIONS[action])
+    _, _, _, step_info = env.step(API._DIRECTION_ACTIONS[action])
 
     # Get next state
     next_data = API.get_player_data(env)
@@ -159,7 +166,7 @@ def update(env):
     # Predict future Q-values
     future_q = model(next_inputs)
 
-    reward = getReward(next_data, score_before)
+    reward = getReward(next_data, score_before, step_info)
 
     actual = getQ(reward, future_q, q, action)
 

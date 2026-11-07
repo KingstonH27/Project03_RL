@@ -151,7 +151,7 @@ class Game:
         """
         if self.done:
             # Episode already finished – just return the terminal observation.
-            from .AI import update
+            from .model import update
             return update(self), 0.0, True, self.last_info.copy()
 
         if not isinstance(action, Action):
@@ -241,7 +241,7 @@ class Game:
             "terminal_reason": "collision" if self.done and collided else None,
         }
 
-        from .AI import update
+        from .model import update
         return update(self), reward, self.done, self.last_info.copy()
 
     def render(self):

@@ -9,13 +9,13 @@ from crossy_road.constants import (
 )
 
 
-_DIRECTION_ACTIONS = {
-    "left": Action.LEFT,
-    "right": Action.RIGHT,
-    "up": Action.UP,
-    "down": Action.DOWN,
-    "noop": Action.NOOP,
-}
+_DIRECTION_ACTIONS = [
+    Action.LEFT,
+    Action.RIGHT,
+    Action.UP,
+    Action.DOWN,
+    Action.NOOP
+]
 
 SENSING_GRID_CODES = {
     0: "land",
@@ -115,17 +115,24 @@ def get_player_data(env):
 
 
 def move_player(env, direction):
-    """Submit a direction or Action to the game and return its step result.
-
-    The game determines whether the requested move is legal; this API does not
-    choose a direction or decide what the agent should do.
     """
-    if isinstance(direction, Action):
+    Submit the direction with the highest Q-value.
+    """
+
+    if isinstance(direction, list) or isinstance(direction, np.ndarray):
+        direction = np.argmax(direction)
+        action = _DIRECTION_ACTIONS[direction]
+
+    elif isinstance(direction, Action):
         action = direction
+
     elif isinstance(direction, str):
-        action = _DIRECTION_ACTIONS.get(direction.lower())
+        direction = direction.lower()
+        action = _DIRECTION_ACTIONS.get(direction)
         if action is None:
             raise ValueError(f"Invalid direction: {direction}")
+
     else:
-        raise TypeError("direction must be an Action or direction string")
+        raise TypeError("direction must be a list, Action, or direction string")
+
     return env.step(action)

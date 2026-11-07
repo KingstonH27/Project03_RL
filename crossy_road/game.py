@@ -34,23 +34,30 @@ class Game:
     Core Crossy-Road logic with a clean AI API.
     """
 
-    def __init__(self, render: bool = False):
-        self.render_mode = render
+    def __init__(self, render: bool = False, screen=None):
+        self.width = screen.get_width() if screen is not None else WIN_WIDTH
+        self.height = screen.get_height() if screen is not None else WIN_HEIGHT
+        self.render_mode = render or screen is not None
+        self._owns_display = render and screen is None
 
         if self.render_mode:
             pygame.init()
-            self.screen = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
-            pygame.display.set_caption("Crossy Road - pygame (API demo)")
-            self.clock = pygame.time.Clock()
+            if screen is None:
+                self.screen = pygame.display.set_mode((self.width, self.height))
+                pygame.display.set_caption("Crossy Road - pygame (API demo)")
+                self.clock = pygame.time.Clock()
+            else:
+                self.screen = screen
+                self.clock = None
         else:
             pygame.init()
 
         # Core objects
-        self.camera = Camera(WIN_WIDTH, WIN_HEIGHT)
-        start_x = WIN_WIDTH // 2
+        self.camera = Camera(self.width, self.height)
+        start_x = self.width // 2
         start_y = 0
         self.player = Player(start_x, start_y)
-        self.lanes = LaneManager()
+        self.lanes = LaneManager(width=self.width)
 
         # Game-state tracking
         self.high_score = 0
@@ -61,20 +68,35 @@ class Game:
         self.show_input_impacts = False
         self.sensitivity_scroll = 0
 
-        # Automatic AI update speed (actions per second)
-        self.ai_speed = 4
+        # AI updates per rendered game frame; 0.25 means one update every four frames.
+        self.ai_speed = 0.125
         self.ai_enabled = True
-        self.ai_last_update = pygame.time.get_ticks()
+        self.ai_step_accumulator = 0.0
 
         # Buttons
+        button_width = min(130, (self.width - 32) // 3)
+        button_gap = 8
+        button_left = (
+            self.width - (button_width * 3 + button_gap * 2)
+        ) // 2
+        button_y = self.height - 48
         self.debug_button_rect = pygame.Rect(
-            WIN_WIDTH - 140, WIN_HEIGHT - 48, 130, 36
+            button_left + 2 * (button_width + button_gap),
+            button_y,
+            button_width,
+            36,
         )
         self.step_button_rect = pygame.Rect(
-            WIN_WIDTH - 280, WIN_HEIGHT - 48, 130, 36
+            button_left + button_width + button_gap,
+            button_y,
+            button_width,
+            36,
         )
         self.impact_button_rect = pygame.Rect(
-            WIN_WIDTH - 420, WIN_HEIGHT - 48, 130, 36
+            button_left,
+            button_y,
+            button_width,
+            36,
         )
 
     # ------------------------------------------------------------------
@@ -92,7 +114,7 @@ class Game:
         if seed is not None:
             random.seed(seed)
 
-        start_x = WIN_WIDTH // 2
+        start_x = self.width // 2
         start_y = 0
 
         self.player.reset(start_x, start_y)
@@ -107,6 +129,7 @@ class Game:
 
         self.done = False
         self.reward = 0.0
+        self.ai_step_accumulator = 0.0
 
         self.last_info = {
             "seed": seed,
@@ -140,15 +163,15 @@ class Game:
             self.sensitivity_scroll = max(0, self.sensitivity_scroll + amount)
 
     def auto_step(self):
-        """Run one AI action whenever the configured interval has elapsed."""
+        """Run AI actions at a rate relative to the rendered frame rate."""
         if not self.ai_enabled or self.ai_speed <= 0:
             return
 
-        now = pygame.time.get_ticks()
-        interval_ms = 1000 / self.ai_speed
+        self.ai_step_accumulator += self.ai_speed
+        update_count = int(self.ai_step_accumulator)
+        self.ai_step_accumulator -= update_count
 
-        if now - self.ai_last_update >= interval_ms:
-            self.ai_last_update = now
+        for _ in range(update_count):
             from .model import update
             update(self)
 
@@ -157,17 +180,17 @@ class Game:
     # ------------------------------------------------------------------
 
     def _draw_debug_grid(self, action_scores):
-        grid = pygame.Surface((WIN_WIDTH, WIN_HEIGHT), pygame.SRCALPHA)
+        grid = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         grid_colour = (255, 255, 255, 100)
 
-        for x in range(0, WIN_WIDTH + 1, LANE_HEIGHT):
+        for x in range(0, self.width + 1, LANE_HEIGHT):
             pygame.draw.line(
-                grid, grid_colour, (x, 0), (x, WIN_HEIGHT), 1
+            grid, grid_colour, (x, 0), (x, self.height), 1
             )
 
         first_lane = int(self.camera.offset_y // LANE_HEIGHT) - 1
         last_lane = int(
-            (self.camera.offset_y + WIN_HEIGHT) // LANE_HEIGHT
+            (self.camera.offset_y + self.height) // LANE_HEIGHT
         ) + 1
 
         for lane in range(max(0, first_lane), last_lane + 1):
@@ -175,7 +198,7 @@ class Game:
                 0, lane * LANE_HEIGHT
             )
             pygame.draw.line(
-                grid, grid_colour, (0, y), (WIN_WIDTH, y), 1
+                grid, grid_colour, (0, y), (self.width, y), 1
             )
 
         half_width = SENSING_GRID_COLUMNS * LANE_HEIGHT / 2
@@ -251,7 +274,7 @@ class Game:
         tile_types,
         vehicle_types,
     ):
-        panel = pygame.Rect(8, 78, WIN_WIDTH - 16, WIN_HEIGHT - 158)
+        panel = pygame.Rect(8, 78, self.width - 16, self.height - 158)
         pygame.draw.rect(self.screen, (20, 20, 20), panel, border_radius=4)
         pygame.draw.rect(self.screen, (110, 110, 110), panel, width=1, border_radius=4)
 
@@ -380,11 +403,11 @@ class Game:
             target_x = self.player.world_x + dx
             target_y = max(0, self.player.world_y + dy)
 
-            if 0 <= target_x <= WIN_WIDTH - self.player.image.get_width():
+            if 0 <= target_x <= self.width - self.player.image.get_width():
 
                 future_offset_y = self.camera.offset_y
                 screen_x = target_x
-                screen_y = WIN_HEIGHT - (target_y - future_offset_y)
+                screen_y = self.height - (target_y - future_offset_y)
 
                 temp_rect = self.player.collision_rect_at(
                     screen_x,
@@ -444,7 +467,7 @@ class Game:
 
                 # Reset player to beginning
                 self.player.reset(
-                    WIN_WIDTH // 2,
+                    self.width // 2,
                     0
                 )
 
@@ -501,7 +524,7 @@ class Game:
     # Rendering
     # ------------------------------------------------------------------
 
-    def render(self):
+    def render(self, action_scores=None):
         """Draw the current frame."""
 
         if not self.render_mode:
@@ -514,9 +537,13 @@ class Game:
 
         from . import model as ai_model
 
-        current_data = ai_model.API.get_player_data(self)
-        current_inputs = ai_model.getInputs(current_data)
-        action_scores = ai_model.model(current_inputs)
+        current_data = None
+        current_inputs = None
+        if action_scores is None or self.show_input_impacts:
+            current_data = ai_model.API.get_player_data(self)
+            current_inputs = ai_model.getInputs(current_data)
+        if action_scores is None:
+            action_scores = ai_model.predict(current_inputs)
         selected_action_index = max(
             range(len(action_scores)),
             key=lambda index: action_scores[index]
@@ -558,31 +585,34 @@ class Game:
             )
 
         # HUD
-        draw_text(
-            self.screen,
-            f"Score: {self.player.score}",
-            30,
-            (80, 20),
-            centre=False
-        )
+        if self.width < 420:
+            draw_text(self.screen, f"Score: {self.player.score}", 18, (8, 6), centre=False)
+            draw_text(self.screen, f"Lives: {self.player.lives}", 18, (8, 26), centre=False)
+            draw_text(self.screen, f"High: {self.high_score}", 18, (8, 46), centre=False)
+        else:
+            draw_text(
+                self.screen,
+                f"Score: {self.player.score}",
+                30,
+                (80, 20),
+                centre=False
+            )
+            draw_text(
+                self.screen,
+                f"Lives: {self.player.lives}",
+                30,
+                (self.width - 260, 20),
+                centre=False
+            )
+            draw_text(
+                self.screen,
+                f"High: {self.high_score}",
+                30,
+                (self.width - 280, 50),
+                centre=False
+            )
 
-        draw_text(
-            self.screen,
-            f"Lives: {self.player.lives}",
-            30,
-            (WIN_WIDTH - 260, 20),
-            centre=False
-        )
-
-        draw_text(
-            self.screen,
-            f"High: {self.high_score}",
-            30,
-            (WIN_WIDTH - 280, 50),
-            centre=False
-        )
-
-        outputs_x = WIN_WIDTH - 250
+        outputs_x = self.width - 250
         outputs_y = 78
         outputs_font = pygame.font.SysFont(None, 16)
         outputs_panel = pygame.Rect(outputs_x, outputs_y, 242, 112)
@@ -632,7 +662,7 @@ class Game:
         draw_text(
             self.screen,
             label,
-            22,
+            min(22, max(12, self.debug_button_rect.width // 5)),
             self.debug_button_rect.center
         )
 
@@ -657,7 +687,7 @@ class Game:
         draw_text(
             self.screen,
             "Impact: ON" if self.show_input_impacts else "Impact: OFF",
-            20,
+            min(20, max(11, self.impact_button_rect.width // 5)),
             self.impact_button_rect.center
         )
 
@@ -680,12 +710,13 @@ class Game:
         draw_text(
             self.screen,
             "Step",
-            22,
+            min(22, max(12, self.step_button_rect.width // 5)),
             self.step_button_rect.center
         )
 
-        pygame.display.flip()
-        self.clock.tick(FPS)
+        if self._owns_display:
+            pygame.display.flip()
+            self.clock.tick(FPS)
 
     # ------------------------------------------------------------------
     # Query helpers
@@ -711,13 +742,13 @@ class Game:
         target_y = max(0, self.player.world_y + dy)
 
         if not (
-            0 <= target_x <= WIN_WIDTH - self.player.image.get_width()
+            0 <= target_x <= self.width - self.player.image.get_width()
         ):
             return False, (target_x, target_y)
 
         future_offset_y = self.camera.offset_y
         screen_x = target_x
-        screen_y = WIN_HEIGHT - (target_y - future_offset_y)
+        screen_y = self.height - (target_y - future_offset_y)
 
         temp_rect = self.player.collision_rect_at(
             screen_x,

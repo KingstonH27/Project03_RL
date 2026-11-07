@@ -4,9 +4,11 @@ import pygame
 # -------------------------------------------------
 #  Screen & timing
 # -------------------------------------------------
-WIN_WIDTH = 640
+WIN_WIDTH = 1200
 WIN_HEIGHT = 800
 FPS = 60
+TRAINING_GAMES_X = 4
+TRAINING_GAMES_Y = 1
 
 # -------------------------------------------------
 #  World geometry
@@ -32,7 +34,7 @@ CAR_MAX_WIDTH = 180
 CAR_MIN_SPEED = 2
 CAR_MAX_SPEED = 8
 CAR_SPEED = 5                         # every standard car moves at this speed
-TRAFFIC_START_LANES_ABOVE_CAMERA = 4  # keep this many bottom rows clear of new traffic
+TRAFFIC_START_LANES_ABOVE_CAMERA = 8  # keep this many bottom rows clear of new traffic
 
 # -------------------------------------------------
 #  Trains

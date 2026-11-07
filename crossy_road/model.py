@@ -1,6 +1,7 @@
 import random
 
 import numpy as np
+import torch
 from . import API
 from .constants import (
     LANE_HEIGHT,
@@ -8,6 +9,18 @@ from .constants import (
     SENSING_GRID_ROWS,
     WIN_WIDTH,
 )
+if torch.cuda.is_available():
+    DEVICE = torch.device("cuda")
+    DEVICE_NAME = torch.cuda.get_device_name(0)
+elif (
+    getattr(torch.backends, "mps", None) is not None
+    and torch.backends.mps.is_available()
+):
+    DEVICE = torch.device("mps")
+    DEVICE_NAME = "Apple MPS"
+else:
+    DEVICE = torch.device("cpu")
+    DEVICE_NAME = "CPU"
 load = True
 learning_rate = 0.1
 gamma = 0.5
@@ -37,27 +50,45 @@ LEAKY_RELU_SLOPE = 0.01
 MAX_GRADIENT_NORM = 1.0
 MAX_PARAMETER_MAGNITUDE = 5.0
 WEIGHT_DECIMALS = 6
+PARAMETER_SCALE = 10 ** WEIGHT_DECIMALS
+print(f"AI training device: {DEVICE_NAME} ({DEVICE})")
 
 weights = [
-    np.round(np.random.rand(neurons, IL) / IL, WEIGHT_DECIMALS)
+    torch.nn.Parameter(
+        torch.round(
+            torch.rand((neurons, IL), device=DEVICE) / IL * PARAMETER_SCALE
+        ) / PARAMETER_SCALE
+    )
 ]
 
 weights.extend([
-    np.round(np.random.rand(neurons, neurons) / neurons, WEIGHT_DECIMALS)
+    torch.nn.Parameter(
+        torch.round(
+            torch.rand((neurons, neurons), device=DEVICE)
+            / neurons
+            * PARAMETER_SCALE
+        ) / PARAMETER_SCALE
+    )
     for _ in range(layers - 2)
 ])
 
 weights.append(
-    np.round(np.random.rand(outputs, neurons) / neurons, WEIGHT_DECIMALS)
+    torch.nn.Parameter(
+        torch.round(
+            torch.rand((outputs, neurons), device=DEVICE)
+            / neurons
+            * PARAMETER_SCALE
+        ) / PARAMETER_SCALE
+    )
 )
 
 
 biases = [
-    np.zeros(neurons)
+    torch.nn.Parameter(torch.zeros(neurons, device=DEVICE))
     for _ in range(layers - 1)
 ]
 
-biases.append(np.zeros(outputs))
+biases.append(torch.nn.Parameter(torch.zeros(outputs, device=DEVICE)))
 
 import os
 
@@ -65,25 +96,38 @@ SAVE_FILE = "model_weights.npz"
 
 
 def _stabilize_parameters(values):
-    finite_values = np.nan_to_num(
+    finite_values = torch.nan_to_num(
         values,
-        nan=0.0,
+        nan=1.0,
         posinf=MAX_PARAMETER_MAGNITUDE,
         neginf=-MAX_PARAMETER_MAGNITUDE,
     )
-    bounded_values = np.clip(
+    bounded_values = torch.clamp(
         finite_values,
         -MAX_PARAMETER_MAGNITUDE,
         MAX_PARAMETER_MAGNITUDE,
     )
-    return np.round(bounded_values, WEIGHT_DECIMALS)
+    return torch.round(bounded_values * PARAMETER_SCALE) / PARAMETER_SCALE
+
+
+def _sanitize_model_parameters():
+    with torch.no_grad():
+        for index in range(len(weights)):
+            weights[index].copy_(_stabilize_parameters(weights[index]))
+            biases[index].copy_(_stabilize_parameters(biases[index]))
 
 
 def save_model():
     np.savez(
         SAVE_FILE,
-        **{f"w{i}": w for i, w in enumerate(weights)},
-        **{f"b{i}": b for i, b in enumerate(biases)}
+        **{
+            f"w{i}": weight.detach().cpu().numpy()
+            for i, weight in enumerate(weights)
+        },
+        **{
+            f"b{i}": bias.detach().cpu().numpy()
+            for i, bias in enumerate(biases)
+        }
     )
 
 
@@ -99,9 +143,19 @@ def load_model():
                 print("Saved model shape differs from this network; using fresh weights.")
                 return
 
-        for i in range(len(weights)):
-            weights[i] = _stabilize_parameters(data[f"w{i}"])
-            biases[i] = _stabilize_parameters(data[f"b{i}"])
+        with torch.no_grad():
+            for i in range(len(weights)):
+                weights[i].copy_(torch.as_tensor(
+                    data[f"w{i}"],
+                    dtype=torch.float32,
+                    device=DEVICE,
+                ))
+                biases[i].copy_(torch.as_tensor(
+                    data[f"b{i}"],
+                    dtype=torch.float32,
+                    device=DEVICE,
+                ))
+        _sanitize_model_parameters()
 
         print("Model loaded!")
     else:
@@ -115,112 +169,86 @@ if load:
 
 
 def _leaky_relu(values):
-    return np.where(values > 0, values, LEAKY_RELU_SLOPE * values)
-
-
-def _leaky_relu_derivative(activations):
-    return np.where(activations > 0, 1.0, LEAKY_RELU_SLOPE)
+    return torch.where(values > 0, values, LEAKY_RELU_SLOPE * values)
 
 
 def model(A,L=layers):
+    if not isinstance(A, torch.Tensor):
+        A = torch.as_tensor(A, dtype=torch.float32, device=DEVICE)
+    else:
+        A = A.to(device=DEVICE, dtype=torch.float32)
+
     for l in range(L):
-        Z = weights[l] @ A + biases[l]
+        Z = A @ weights[l].T + biases[l]
         A = _leaky_relu(Z) if l < layers-1 else Z
     return A
 
 
+def predict(input_values):
+    _sanitize_model_parameters()
+    with torch.no_grad():
+        return model(input_values).detach().cpu().numpy()
+
+
 def input_sensitivities(input_values, output_index):
-    activations = [np.asarray(input_values, dtype=float)]
-
-    for layer_index in range(layers):
-        Z = weights[layer_index] @ activations[-1] + biases[layer_index]
-        activation = (
-            _leaky_relu(Z)
-            if layer_index < layers - 1
-            else Z
-        )
-        activations.append(activation)
-
-    gradient = np.zeros(outputs)
-    gradient[output_index] = 1.0
-
-    for layer_index in range(layers - 1, -1, -1):
-        if layer_index < layers - 1:
-            gradient *= _leaky_relu_derivative(activations[layer_index + 1])
-        gradient = weights[layer_index].T @ gradient
-
-    return gradient
+    _sanitize_model_parameters()
+    input_tensor = torch.as_tensor(
+        input_values,
+        dtype=torch.float32,
+        device=DEVICE,
+    ).detach().requires_grad_(True)
+    output = model(input_tensor)[output_index]
+    gradient = torch.autograd.grad(output, input_tensor)[0]
+    return gradient.detach().cpu().numpy()
 
 
-# Derivatives:
-dW = [np.zeros_like(w) for w in weights]
-dB = [np.zeros_like(b) for b in biases]
-
-
-def train(actual):  # CHANGED: Accept five target Q-values
-    activations = [inputs]
-    for l in range(layers):
-        Z = weights[l] @ activations[-1] + biases[l]
-        A = _leaky_relu(Z) if l < layers-1 else Z
-        activations.append(A)
-
-    predicted = model(inputs)
-
-    dL = 2 * (predicted - actual)
-
-    # Backpropagation
-    for l in range(layers - 1, -1, -1):
-        dZ = (
-            dL * _leaky_relu_derivative(activations[l + 1])
-            if l < layers - 1
-            else dL
-        )
-
-        dW[l] = np.outer(dZ, activations[l])
-        dB[l] = dZ
-
-        dL = weights[l].T @ dZ
-
-    gradients = dW + dB
-    for gradient in gradients:
-        np.nan_to_num(
-            gradient,
-            copy=False,
-            nan=0.0,
-            posinf=MAX_GRADIENT_NORM,
-            neginf=-MAX_GRADIENT_NORM,
-        )
-
-    max_gradient = max(
-        (float(np.max(np.abs(gradient))) for gradient in gradients),
-        default=0.0,
+def train(actual, input_values=None):
+    _sanitize_model_parameters()
+    training_inputs = inputs if input_values is None else input_values
+    input_tensor = torch.as_tensor(
+        training_inputs,
+        dtype=torch.float32,
+        device=DEVICE,
     )
-    if max_gradient > 0.0:
-        scaled_norm = np.sqrt(sum(
-            np.sum((gradient / max_gradient) ** 2)
-            for gradient in gradients
-        ))
-        gradient_scale = min(
-            1.0,
-            (MAX_GRADIENT_NORM / max_gradient) / scaled_norm,
-        )
-    else:
-        gradient_scale = 1.0
+    target_tensor = torch.as_tensor(
+        actual,
+        dtype=torch.float32,
+        device=DEVICE,
+    )
+    parameters = weights + biases
+    for parameter in parameters:
+        parameter.grad = None
 
-    for l in range(layers):
-        weights[l] = _stabilize_parameters(
-            weights[l] - learning_rate * gradient_scale * dW[l]
-        )
-        biases[l] = _stabilize_parameters(
-            biases[l] - learning_rate * gradient_scale * dB[l]
-        )
+    loss = torch.nn.functional.mse_loss(
+        model(input_tensor),
+        target_tensor,
+    )
+    loss.backward()
 
-    return model(inputs)
+    for parameter in parameters:
+        if parameter.grad is not None:
+            parameter.grad.copy_(torch.nan_to_num(
+                parameter.grad,
+                nan=0.0,
+                posinf=MAX_GRADIENT_NORM,
+                neginf=-MAX_GRADIENT_NORM,
+            ))
+
+    torch.nn.utils.clip_grad_norm_(parameters, MAX_GRADIENT_NORM)
+
+    with torch.no_grad():
+        for parameter in parameters:
+            parameter.add_(parameter.grad, alpha=-learning_rate)
+            parameter.copy_(_stabilize_parameters(parameter))
+            parameter.grad = None
+
+    return predict(input_tensor)
 
 
 def getInputs(data):
     position = np.asarray(data["player_position"], dtype=float).flatten()
-    position[0] = np.clip(position[0] / WIN_WIDTH, 0.0, 1.0)
+    camera_width = data.get("camera", {}).get("width", WIN_WIDTH)
+    position[0] = np.clip(position[0] / camera_width, 0.0, 1.0)
     position[1] = np.clip(position[1] / (100 * LANE_HEIGHT), 0.0, 1.0)
 
     tiles = np.asarray(data["sensing_tiles"]).reshape(-1)
@@ -258,48 +286,55 @@ def getQ(reward, future_q, current_q, action):
     return actual
 
 
-def update(env):
-    global inputs, r, q
+def update_many(envs):
+    global inputs, q
 
-    # Get current state
-    data = API.get_player_data(env)
-    inputs = np.array(getInputs(data))
-    #print("Inputs:", inputs.shape)
-    #print("Weights:", weights[0].shape)
-    #print("Player position:", np.array(data["player_position"]).shape)
-    #print("Sensing tiles:", np.array(data["sensing_tiles"]).shape)
-    #print("Sensing vehicles:", np.array(data["sensing_vehicles"]).shape)
+    envs = list(envs)
+    if not envs:
+        return []
 
-    # Predict current Q-values
-    q = model(inputs)
+    current_data = [API.get_player_data(env) for env in envs]
+    input_batch = np.stack([
+        getInputs(data)
+        for data in current_data
+    ]).astype(np.float32)
+    current_q = predict(input_batch)
 
-    action_indices = range(len(API._DIRECTION_ACTIONS))
+    actions = []
+    step_infos = []
+    scores_before = []
+    for env, data, action_values in zip(envs, current_data, current_q):
+        if random.random() < exploration_rate:
+            action_index = random.randrange(outputs)
+        else:
+            action_index = int(np.argmax(action_values))
 
-    if random.random() < exploration_rate:
-        action = random.choice(action_indices)
-    else:
-        action = max(action_indices, key=lambda index: q[index])
+        scores_before.append(data["current_score"])
+        _, _, _, step_info = env.step(API._DIRECTION_ACTIONS[action_index])
+        actions.append(action_index)
+        step_infos.append(step_info)
 
-    # Execute action
-    score_before = data["current_score"]
-    _, _, _, step_info = env.step(API._DIRECTION_ACTIONS[action])
+    next_data = [API.get_player_data(env) for env in envs]
+    next_input_batch = np.stack([
+        getInputs(data)
+        for data in next_data
+    ]).astype(np.float32)
+    future_q = predict(next_input_batch)
 
-    # Get next state
-    next_data = API.get_player_data(env)
-    next_inputs = np.array(getInputs(next_data))
+    targets = current_q.copy()
+    for index, data in enumerate(next_data):
+        reward = getReward(data, scores_before[index], step_infos[index])
+        targets[index, actions[index]] = (
+            reward + gamma * np.max(future_q[index]) * (1 - done)
+        )
 
-    # Predict future Q-values
-    future_q = model(next_inputs)
-
-    reward = getReward(next_data, score_before, step_info)
-
-    actual = getQ(reward, future_q, q, action)
-
-    train(actual)
+    train(targets, input_batch)
     save_model()
 
-    # Update inputs
-    inputs = next_inputs
-    q = model(inputs)
-
+    inputs = next_input_batch[-1]
+    q = predict(next_input_batch)[-1]
     return next_data
+
+
+def update(env):
+    return update_many([env])[0]

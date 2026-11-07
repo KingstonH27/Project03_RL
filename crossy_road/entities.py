@@ -168,10 +168,18 @@ class Player(pygame.sprite.Sprite):
 #  Car – normal traffic vehicle
 # ----------------------------------------------------------------------
 class Car(pygame.sprite.Sprite):
-    def __init__(self, lane_index, direction, speed=CAR_SPEED, biome=None):
+    def __init__(
+        self,
+        lane_index,
+        direction,
+        speed=CAR_SPEED,
+        biome=None,
+        world_width=WIN_WIDTH,
+    ):
         super().__init__()
         self.lane_index = lane_index
         self.direction = direction                # +1 = left→right, -1 = right→left
+        self.world_width = world_width
         self.image = _load_random_car_image(direction)
         if self.image is None:
             self.width = random.randint(CAR_MIN_WIDTH, CAR_MAX_WIDTH)
@@ -184,7 +192,7 @@ class Car(pygame.sprite.Sprite):
         self.world_y = lane_index * LANE_HEIGHT + LANE_HEIGHT // 2
 
         # start just outside the screen on the appropriate side
-        self.world_x = -self.width if direction == 1 else WIN_WIDTH + self.width
+        self.world_x = -self.width if direction == 1 else self.world_width + self.width
 
         # LaneManager assigns the road's speed, so cars on one road stay in sync.
         self.speed = speed
@@ -198,7 +206,7 @@ class Car(pygame.sprite.Sprite):
     def update(self, camera):
         """Move horizontally and delete when off‑screen."""
         self.world_x += self.speed * self.direction
-        if (self.direction == 1 and self.world_x > WIN_WIDTH) or \
+        if (self.direction == 1 and self.world_x > self.world_width) or \
            (self.direction == -1 and self.world_x + self.width < 0):
             self.kill()
             return
@@ -209,10 +217,18 @@ class Car(pygame.sprite.Sprite):
 #  Train – long, slower obstacle that appears on traffic lanes
 # ----------------------------------------------------------------------
 class Train(pygame.sprite.Sprite):
-    def __init__(self, lane_index, direction, speed_multiplier=1.0, biome=None):
+    def __init__(
+        self,
+        lane_index,
+        direction,
+        speed_multiplier=1.0,
+        biome=None,
+        world_width=WIN_WIDTH,
+    ):
         super().__init__()
         self.lane_index = lane_index
         self.direction = direction
+        self.world_width = world_width
         # make the train noticeably longer than a car
         self.width = random.randint(CAR_MAX_WIDTH + 100, CAR_MAX_WIDTH + 300)
 
@@ -220,7 +236,7 @@ class Train(pygame.sprite.Sprite):
         self.image.fill((100, 100, 200))         # placeholder colour
 
         self.world_y = lane_index * LANE_HEIGHT + LANE_HEIGHT // 2
-        self.world_x = -self.width if direction == 1 else WIN_WIDTH + self.width
+        self.world_x = -self.width if direction == 1 else self.world_width + self.width
 
         # Trains share a fast fixed speed on every track.
         self.speed = TRAIN_SPEED
@@ -233,7 +249,7 @@ class Train(pygame.sprite.Sprite):
 
     def update(self, camera):
         self.world_x += self.speed * self.direction
-        if (self.direction == 1 and self.world_x > WIN_WIDTH) or \
+        if (self.direction == 1 and self.world_x > self.world_width) or \
            (self.direction == -1 and self.world_x + self.width < 0):
             self.kill()
             return

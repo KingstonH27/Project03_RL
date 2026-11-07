@@ -25,7 +25,8 @@ class LaneManager:
         • biome switching (colours & traffic parameters)
         • spawning of cars and trains
     """
-    def __init__(self):
+    def __init__(self, width=WIN_WIDTH):
+        self.width = width
         self.all_obstacles = pygame.sprite.Group()   # cars + trains
         self.spawn_timers = {}                       # lane_index → frames until next spawn
         self.rows = {}                               # lane_index → generated row definition
@@ -132,7 +133,7 @@ class LaneManager:
         tile = self.road_tiles.get(self._road_tile_kind(lane))
         if tile is None:
             return
-        for x in range(0, WIN_WIDTH, tile.get_width()):
+        for x in range(0, self.width, tile.get_width()):
             surface.blit(tile, (x, top_screen_y))
 
     def _ensure_rows(self, last_lane):
@@ -158,11 +159,17 @@ class LaneManager:
         # 4️⃣  Determine which lanes are currently visible (with a little buffer)
         first_lane = int(camera.offset_y // LANE_HEIGHT) - 2
         last_lane = int((camera.offset_y + camera.height) // LANE_HEIGHT) + 2
-        # ``first_lane`` includes two off-screen buffer rows; base the safe area
-        # on the actual bottom visible row instead.
+        player_lane = int(player_world_y // LANE_HEIGHT)
         first_traffic_lane = (
-            int(camera.offset_y // LANE_HEIGHT)
-            + TRAFFIC_START_LANES_ABOVE_CAMERA
+            max(
+                int(camera.offset_y // LANE_HEIGHT)
+                + TRAFFIC_START_LANES_ABOVE_CAMERA,
+                player_lane + 1,
+            )
+        )
+        last_lane = max(
+            last_lane,
+            player_lane + TRAFFIC_START_LANES_ABOVE_CAMERA,
         )
         self._ensure_rows(last_lane + 1)
 
@@ -187,13 +194,15 @@ class LaneManager:
                 if row["type"]["obstacle_type"] == "train":
                     train = Train(lane, row["type"]["direction"],
                                   speed_multiplier=difficulty_factor,
-                                  biome=row["biome"])
+                                  biome=row["biome"],
+                                  world_width=self.width)
                     train.update_screen_rect(camera)
                     self.all_obstacles.add(train)
                 elif row["type"]["obstacle_type"] == "car":
                     car = Car(lane, row["type"]["direction"],
                               speed=row["vehicle_speed"],
-                              biome=row["biome"])
+                              biome=row["biome"],
+                              world_width=self.width)
                     car.update_screen_rect(camera)
                     self.all_obstacles.add(car)
 
@@ -221,7 +230,7 @@ class LaneManager:
 
             row = self.rows[lane]
             colour = row["biome"][row["type"]["colour_key"]]
-            rect = pygame.Rect(0, top_screen_y, WIN_WIDTH, LANE_HEIGHT)
+            rect = pygame.Rect(0, top_screen_y, self.width, LANE_HEIGHT)
             pygame.draw.rect(surface, colour, rect)
             if self._is_road(lane):
                 self._draw_road_tile(surface, lane, top_screen_y)
@@ -230,8 +239,8 @@ class LaneManager:
                 rail_y = (top_screen_y + LANE_HEIGHT // 4,
                           top_screen_y + 3 * LANE_HEIGHT // 4)
                 for y in rail_y:
-                    pygame.draw.line(surface, (45, 45, 45), (0, y), (WIN_WIDTH, y), 5)
-                for x in range(0, WIN_WIDTH, 32):
+                    pygame.draw.line(surface, (45, 45, 45), (0, y), (self.width, y), 5)
+                for x in range(0, self.width, 32):
                     pygame.draw.line(surface, (115, 75, 45),
                                      (x, rail_y[0] - 8), (x, rail_y[1] + 8), 4)
 

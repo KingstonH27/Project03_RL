@@ -1,10 +1,12 @@
+import random
+
 import numpy as np
 from . import API
 
 learning_rate = 0.01
 gamma = 0.1
 done = 0
-previous_score = 0  # NEW
+exploration_rate = 0.1
 
 def bellman(r,q):
     Q = r + gamma * max(q) * (1 - done)
@@ -27,7 +29,6 @@ weights.extend([
 
 weights.append(np.random.randn(outputs, neurons))
 
-weights.append(np.random.randn(outputs, neurons))
 
 biases = [
     np.zeros(neurons)
@@ -35,6 +36,35 @@ biases = [
 ]
 
 biases.append(np.zeros(outputs))
+
+import os
+
+SAVE_FILE = "model_weights.npz"
+def save_model():
+    np.savez(
+        SAVE_FILE,
+        **{f"w{i}": w for i, w in enumerate(weights)},
+        **{f"b{i}": b for i, b in enumerate(biases)}
+    )
+
+
+def load_model():
+    if os.path.exists(SAVE_FILE):
+        data = np.load(SAVE_FILE)
+
+        for i in range(len(weights)):
+            weights[i] = data[f"w{i}"]
+            biases[i] = data[f"b{i}"]
+
+        print("Model loaded!")
+    else:
+        print("No saved model found. Using random weights.")
+
+
+
+
+
+load_model()
 
 
 def model(A,L=layers):
@@ -83,40 +113,18 @@ def getInputs(data):
     return np.concatenate((position, sense))
 
 
-def getReward(data):
-    global previous_score  # NEW
-
-    score = data["current_score"]
-    reward = 1 if score > previous_score else 0
-    previous_score = score  # NEW
-
-    return reward
+def getReward(data, score_before):
+    return 100 if data["current_score"] > score_before else -1
 
 
-def getQ(data, future_q):
-    obstacles = np.array(data["sensing_grid"]).reshape(5, 5)
-
-    positions = [
-        obstacles[2, 1],
-        obstacles[2, 3],
-        obstacles[1, 2],
-        obstacles[3, 2],
-        obstacles[2, 2]
-    ]
-
-    r = getReward(data)
-    Qs = []
-
-    for position in positions:
-        reward = r if position in [0, 3] else -1
-        Q = bellman(reward, future_q)[0]
-        Qs.append(Q)
-
-    return np.array(Qs)
+def getQ(reward, future_q, current_q, action):
+    actual = current_q.copy()
+    actual[action] = reward + gamma * max(future_q) * (1 - done)
+    return actual
 
 
 def update(env):
-    global inputs, r, q, previous_score
+    global inputs, r, q
 
     # Get current state
     data = API.get_player_data(env)
@@ -129,10 +137,19 @@ def update(env):
     # Predict current Q-values
     q = model(inputs)
 
-    # Choose action
-    action = np.argmax(q)
+    legal_action_indices = [
+        index
+        for index, candidate in enumerate(API._DIRECTION_ACTIONS)
+        if data["legal_actions"].get(candidate.name, False)
+    ]
+
+    if random.random() < exploration_rate:
+        action = random.choice(legal_action_indices)
+    else:
+        action = max(legal_action_indices, key=lambda index: q[index])
 
     # Execute action
+    score_before = data["current_score"]
     env.step(API._DIRECTION_ACTIONS[action])
 
     # Get next state
@@ -142,11 +159,12 @@ def update(env):
     # Predict future Q-values
     future_q = model(next_inputs)
 
-    # Calculate Bellman targets
-    actual = getQ(data, future_q)
+    reward = getReward(next_data, score_before)
 
-    # Train
+    actual = getQ(reward, future_q, q, action)
+
     train(actual)
+    save_model()
 
     # Update inputs
     inputs = next_inputs

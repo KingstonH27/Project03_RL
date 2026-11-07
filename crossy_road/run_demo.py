@@ -14,6 +14,7 @@ from crossy_road.constants import WIN_WIDTH, WIN_HEIGHT
 def main():
     # Create a game that *does* render a window
     game = Game(render=True)
+    game.ai_enabled = False
 
     state = "menu"          # possible values: menu, playing, paused, game_over
     running = True
@@ -36,9 +37,11 @@ def main():
                     if event.key == pygame.K_SPACE:
                         state = "playing"
                         game.reset()
+                        game.ai_enabled = True
                 elif state == "playing":
                     if event.key == pygame.K_p:
                         state = "paused"
+                        game.ai_enabled = False
                     elif event.key == pygame.K_LEFT:
                         game.step(Action.LEFT)
                     elif event.key == pygame.K_RIGHT:
@@ -50,10 +53,12 @@ def main():
                 elif state == "paused":
                     if event.key == pygame.K_p:
                         state = "playing"
+                        game.ai_enabled = True
                 elif state == "game_over":
                     if event.key == pygame.K_r:
                         state = "playing"
                         game.reset()
+                        game.ai_enabled = True
 
         # -----------------------------------------------------------------
         #  Frame update (when we are actually playing)
@@ -63,6 +68,7 @@ def main():
             observation, reward, done, _ = game.step(Action.NOOP)
             if done:
                 state = "game_over"
+                game.ai_enabled = False
 
         # -----------------------------------------------------------------
         #  Render everything (the Game class draws the world + HUD)

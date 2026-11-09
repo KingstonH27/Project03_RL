@@ -4,10 +4,8 @@ import numpy as np
 import torch
 from . import API
 from .constants import (
-    LANE_HEIGHT,
     SENSING_GRID_COLUMNS,
     SENSING_GRID_ROWS,
-    WIN_WIDTH,
 )
 if torch.cuda.is_available():
     DEVICE = torch.device("cuda")
@@ -21,30 +19,26 @@ elif (
 else:
     DEVICE = torch.device("cpu")
     DEVICE_NAME = "CPU"
-load = False
+load = True
 learning_rate = 0.1
-gamma = 0.5
+gamma = 0.4
 done = 0
-exploration_rate = 0.3
+exploration_rate = 0.1
 REWARD_SCORE_INCREASE = 1
-REWARD_NO_PROGRESS = -5
-REWARD_DEATH = -100
+REWARD_NO_PROGRESS = -2
+REWARD_DEATH = -10000
 
 def bellman(r,q):
     Q = r + gamma * max(q) * (1 - done)
     return Q, q
 
-POSITION_INPUTS = 2
 SENSING_CELL_COUNT = SENSING_GRID_ROWS * SENSING_GRID_COLUMNS
-TILE_FEATURE_COUNT = len(API.SENSING_TILE_TYPES)
-VEHICLE_FEATURE_COUNT = len(API.SENSING_VEHICLE_TYPES)
-IL = POSITION_INPUTS + SENSING_CELL_COUNT * (
-    TILE_FEATURE_COUNT + VEHICLE_FEATURE_COUNT
-)
+INPUTS_PER_CELL = 2
+IL = SENSING_CELL_COUNT * INPUTS_PER_CELL
 inputs = np.zeros(IL)
 outputs = 5
 q = np.zeros(outputs)
-layers = 3
+layers = 2
 neurons = 10
 LEAKY_RELU_SLOPE = 0.01
 MAX_GRADIENT_NORM = 1.0
@@ -246,30 +240,25 @@ def train(actual, input_values=None):
 
 
 def getInputs(data):
-    position = np.asarray(data["player_position"], dtype=float).flatten()
-    camera_width = data.get("camera", {}).get("width", WIN_WIDTH)
-    position[0] = np.clip(position[0] / camera_width, 0.0, 1.0)
-    position[1] = np.clip(position[1] / (100 * LANE_HEIGHT), 0.0, 1.0)
-
     tiles = np.asarray(data["sensing_tiles"]).reshape(-1)
-    tile_indices = {
-        tile_type: index
-        for index, tile_type in enumerate(API.SENSING_TILE_TYPES)
-    }
-    tile_features = np.zeros((SENSING_CELL_COUNT, TILE_FEATURE_COUNT))
+    terrain_codes = np.zeros(SENSING_CELL_COUNT, dtype=float)
     for cell_index, tile_type in enumerate(tiles):
-        tile_features[cell_index, tile_indices[tile_type]] = 1.0
+        if tile_type in ("road_right", "road_left"):
+            terrain_codes[cell_index] = 1.0
+        elif tile_type in ("train_track_right", "train_track_left"):
+            terrain_codes[cell_index] = 2.0
 
-    vehicle_features = np.asarray(
+    vehicle_presence = np.asarray(
         data["sensing_vehicles"],
         dtype=float
-    ).reshape(SENSING_CELL_COUNT, VEHICLE_FEATURE_COUNT)
+    ).reshape(SENSING_CELL_COUNT, len(API.SENSING_VEHICLE_TYPES))
+    vehicle_codes = np.zeros(SENSING_CELL_COUNT, dtype=float)
+    car_index = API.SENSING_VEHICLE_TYPES.index("car")
+    train_index = API.SENSING_VEHICLE_TYPES.index("train")
+    vehicle_codes[vehicle_presence[:, car_index] > 0] = 1.0
+    vehicle_codes[vehicle_presence[:, train_index] > 0] = 2.0
 
-    return np.concatenate((
-        position,
-        tile_features.flatten(),
-        vehicle_features.flatten(),
-    ))
+    return np.column_stack((terrain_codes, vehicle_codes)).flatten()
 
 
 def getReward(data, score_before, step_info):

@@ -271,8 +271,6 @@ class Game:
         self,
         sensitivities,
         action_name,
-        tile_types,
-        vehicle_types,
     ):
         panel = pygame.Rect(8, 78, self.width - 16, self.height - 158)
         pygame.draw.rect(self.screen, (20, 20, 20), panel, border_radius=4)
@@ -287,39 +285,29 @@ class Game:
         self.screen.blit(title, (panel.x + 6, panel.y + 5))
 
         instructions = font.render(
-            "Green raises Q; red lowers Q. Scroll to see all inputs.",
+            "Terrain: 0 none, 1 road, 2 track; obstacle: 0 none, 1 car, 2 train. Green raises Q; red lowers Q.",
             True,
             (200, 200, 200)
         )
         self.screen.blit(instructions, (panel.x + 6, panel.y + 22))
 
         entries = [
-            ("player_x", float(sensitivities[0])),
-            ("player_y", float(sensitivities[1])),
+            (f"terrain[{row},{column}]", float(sensitivities[
+                (row * SENSING_GRID_COLUMNS + column) * 2
+            ]))
+            for row in range(SENSING_GRID_ROWS)
+            for column in range(SENSING_GRID_COLUMNS)
         ]
-        tile_input_start = 2
-        vehicle_input_start = tile_input_start + (
-            SENSING_GRID_ROWS * SENSING_GRID_COLUMNS * len(tile_types)
+        entries.extend(
+            (
+                f"obstacle[{row},{column}]",
+                float(sensitivities[
+                    (row * SENSING_GRID_COLUMNS + column) * 2 + 1
+                ]),
+            )
+            for row in range(SENSING_GRID_ROWS)
+            for column in range(SENSING_GRID_COLUMNS)
         )
-        for row in range(SENSING_GRID_ROWS):
-            for column in range(SENSING_GRID_COLUMNS):
-                cell_index = row * SENSING_GRID_COLUMNS + column
-                tile_start = tile_input_start + cell_index * len(tile_types)
-                for tile_index, tile_type in enumerate(tile_types):
-                    entries.append((
-                        f"tile[{row},{column}]={tile_type}",
-                        float(sensitivities[tile_start + tile_index])
-                    ))
-
-                vehicle_start = (
-                    vehicle_input_start
-                    + cell_index * len(vehicle_types)
-                )
-                for vehicle_index, vehicle_type in enumerate(vehicle_types):
-                    entries.append((
-                        f"vehicle[{row},{column}]={vehicle_type}",
-                        float(sensitivities[vehicle_start + vehicle_index])
-                    ))
 
         entries.sort(key=lambda entry: abs(entry[1]), reverse=True)
         row_height = 18
@@ -580,8 +568,6 @@ class Game:
             self._draw_input_sensitivity_panel(
                 input_sensitivities,
                 ai_model.API._DIRECTION_ACTIONS[selected_action_index].name,
-                ai_model.API.SENSING_TILE_TYPES,
-                ai_model.API.SENSING_VEHICLE_TYPES,
             )
 
         # HUD

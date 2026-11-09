@@ -24,7 +24,7 @@ PLAYER_SIZE = 50
 PLAYER_RENDER_SIZE = LANE_HEIGHT     # render the 32px sprite at one movement-tile size
 PLAYER_COLOR = (255, 215, 0)        # bright yellow
 PLAYER_ART_SMOOTHING = 0.28         # visual follow speed; lower values create more lag
-PLAYER_HITBOX_SCALE = 1.0            # 1.0 matches the player art; lower values shrink it
+PLAYER_HITBOX_SCALE = 0.8            # 1.0 matches the player art; lower values shrink it
 
 # -------------------------------------------------
 #  Cars
@@ -34,7 +34,7 @@ CAR_MAX_WIDTH = 180
 CAR_MIN_SPEED = 2
 CAR_MAX_SPEED = 8
 CAR_SPEED = 5                         # every standard car moves at this speed
-TRAFFIC_START_LANES_ABOVE_CAMERA = 8  # keep this many bottom rows clear of new traffic
+TRAFFIC_START_LANES_ABOVE_CAMERA = 6  # keep this many bottom rows clear of new traffic
 
 # -------------------------------------------------
 #  Trains
@@ -49,7 +49,7 @@ TRAIN_SPEED = 14                     # every train uses this fast, fixed speed
 MAX_LIVES = 1
 FOLLOW_DISTANCE = 3 * LANE_HEIGHT    # keep player three lanes from the bottom
 
-CAMERA_SMOOTHING = 0.12
+CAMERA_SMOOTHING = 0.35
 
 # -------------------------------------------------
 #  Biome handling
@@ -59,6 +59,9 @@ BIOME_CHANGE_EVERY = 15 * LANE_HEIGHT   # change scenery every 15 lanes
 # -------------------------------------------------
 #  Map generation
 # -------------------------------------------------
+# Multiplies traffic-row weights; 0 disables traffic and 1 keeps the current density.
+TRAFFIC_AMOUNT = 2.0
+
 # Each newly revealed map row is picked from this list.  ``probability`` is a
 # relative weight, so the values do not need to add up to one.  Add new row
 # types here (and handle their behaviour in LaneManager) to extend the map.
@@ -126,8 +129,8 @@ BIOMES = [
 # -------------------------------------------------
 #  Observation helper – how many lanes ahead we expose to the AI
 # -------------------------------------------------
-VIEW_LANES_AHEAD = 6
-SENSING_GRID_ROWS = 7
-SENSING_GRID_COLUMNS = 7
+VIEW_LANES_AHEAD = 5
+SENSING_GRID_ROWS = 5
+SENSING_GRID_COLUMNS = 5
 SENSING_RADIUS_TILES = max(SENSING_GRID_ROWS, SENSING_GRID_COLUMNS) // 2
 SENSING_SIZE_TILES = SENSING_GRID_ROWS

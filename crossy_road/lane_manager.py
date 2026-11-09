@@ -10,6 +10,7 @@ from .constants import (
     BIOME_CHANGE_EVERY,
     DEFAULT_BIOME,
     BIOMES,
+    TRAFFIC_AMOUNT,
     ROW_TYPES,
 )
 from .entities import Car, Train
@@ -63,16 +64,22 @@ class LaneManager:
 
     def _create_row(self, lane):
         """Generate and retain the next row of the procedural map."""
-        was_forced_road = self._force_road_next
+        was_forced_road = self._force_road_next and TRAFFIC_AMOUNT > 0
         candidates = ROW_TYPES
         if was_forced_road:
             candidates = [
                 row for row in ROW_TYPES
                 if row.get("obstacle_type") == "car"
             ]
+        weights = [
+            row["probability"] * (
+                TRAFFIC_AMOUNT if row["has_traffic"] else 1
+            )
+            for row in candidates
+        ]
         row_type = random.choices(
             candidates,
-            weights=[row["probability"] for row in candidates],
+            weights=weights,
             k=1,
         )[0]
         # A normally selected road reserves one following road row.  That

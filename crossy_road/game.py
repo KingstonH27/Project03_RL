@@ -599,14 +599,14 @@ class Game:
             )
 
         outputs_x = self.width - 250
-        outputs_y = 78
+        outputs_y = 0
         outputs_font = pygame.font.SysFont(None, 16)
         outputs_panel = pygame.Rect(outputs_x, outputs_y, 242, 112)
         pygame.draw.rect(self.screen, (20, 20, 20), outputs_panel, border_radius=4)
         pygame.draw.rect(self.screen, (110, 110, 110), outputs_panel, width=1, border_radius=4)
         self.screen.blit(
             outputs_font.render("Action outputs", True, (235, 235, 235)),
-            (outputs_x + 7, outputs_y + 5)
+            (outputs_x + 7, outputs_y+5)
         )
 
         for index, action in enumerate(ai_model.API._DIRECTION_ACTIONS):

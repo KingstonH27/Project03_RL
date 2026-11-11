@@ -4,9 +4,17 @@ import pygame
 # -------------------------------------------------
 #  Screen & timing
 # -------------------------------------------------
-WIN_WIDTH = 1200
-WIN_HEIGHT = 800
-FPS = 60
+# Retrieve video display information
+pygame.init()
+screen_info = pygame.display.Info()
+
+# Extract width and height
+screen_width = screen_info.current_w
+screen_height = screen_info.current_h * 0.9
+
+WIN_WIDTH = screen_width
+WIN_HEIGHT = screen_height
+FPS = 120
 TRAINING_GAMES_X = 4
 TRAINING_GAMES_Y = 1
 
@@ -32,8 +40,8 @@ PLAYER_HITBOX_SCALE = 0.8            # 1.0 matches the player art; lower values 
 CAR_MIN_WIDTH = 80
 CAR_MAX_WIDTH = 180
 CAR_MIN_SPEED = 2
-CAR_MAX_SPEED = 8
-CAR_SPEED = 5                         # every standard car moves at this speed
+CAR_MAX_SPEED = 10
+CAR_SPEED = 7                         # every standard car moves at this speed
 TRAFFIC_START_LANES_ABOVE_CAMERA = 6  # keep this many bottom rows clear of new traffic
 
 # -------------------------------------------------

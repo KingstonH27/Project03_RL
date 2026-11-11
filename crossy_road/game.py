@@ -352,6 +352,80 @@ class Game:
             (panel.right - range_text.get_width() - 8, panel.bottom - 20)
         )
 
+    def _draw_sensing_coordinates(self, sensitivities):
+        font = pygame.font.SysFont("monospace", 13)
+
+        half_width = SENSING_GRID_COLUMNS * LANE_HEIGHT / 2
+        half_height = SENSING_GRID_ROWS * LANE_HEIGHT / 2
+
+        player_center_x = self.player.world_x + PLAYER_RENDER_SIZE / 2
+        player_center_y = self.player.world_y + PLAYER_RENDER_SIZE / 2
+
+        sensing_left, sensing_bottom = self.camera.world_to_screen(
+            player_center_x - half_width,
+            player_center_y - half_height
+        )
+
+        top = sensing_bottom - SENSING_GRID_ROWS * LANE_HEIGHT
+
+        # Find strongest impact for each cell
+        scores = []
+
+        for row in range(SENSING_GRID_ROWS):
+            for column in range(SENSING_GRID_COLUMNS):
+                index = (row * SENSING_GRID_COLUMNS + column) * 2
+
+                terrain = float(sensitivities[index])
+                obstacle = float(sensitivities[index + 1])
+
+                score = max((terrain, obstacle), key=abs)
+                scores.append(score)
+
+        max_impact = max((abs(s) for s in scores), default=0)
+
+        for row in range(SENSING_GRID_ROWS):
+            for column in range(SENSING_GRID_COLUMNS):
+
+                x = sensing_left + column * LANE_HEIGHT
+                y = top + row * LANE_HEIGHT
+
+                score = scores[row * SENSING_GRID_COLUMNS + column]
+
+                strength = abs(score) / max_impact if max_impact else 0
+
+                if score > 0:
+                    color = (0, 255, 0)
+                elif score < 0:
+                    color = (255, 0, 0)
+                else:
+                    color = (100, 100, 100)
+
+                alpha = int(20 + strength * 150)
+
+                overlay = pygame.Surface(
+                    (LANE_HEIGHT, LANE_HEIGHT),
+                    pygame.SRCALPHA
+                )
+                overlay.fill((*color, alpha))
+
+                self.screen.blit(overlay, (x, y))
+
+                label = font.render(
+                    f"{row},{column}",
+                    True,
+                    (255, 255, 255)
+                )
+
+                background = pygame.Rect(
+                    x + 3, y + 3,
+                    label.get_width() + 6,
+                    label.get_height() + 4
+                )
+
+                pygame.draw.rect(self.screen, (20, 20, 20), background)
+
+                self.screen.blit(label, (x + 6, y + 5))
+
     # ------------------------------------------------------------------
     # Game step
     # ------------------------------------------------------------------
@@ -527,7 +601,7 @@ class Game:
 
         current_data = None
         current_inputs = None
-        if action_scores is None or self.show_input_impacts:
+        if action_scores is None or self.show_input_impacts or self.show_debug_grid:
             current_data = ai_model.API.get_player_data(self)
             current_inputs = ai_model.getInputs(current_data)
         if action_scores is None:
@@ -537,7 +611,8 @@ class Game:
             key=lambda index: action_scores[index]
         )
         input_sensitivities = None
-        if self.show_input_impacts:
+
+        if self.show_input_impacts or self.show_debug_grid:
             input_sensitivities = ai_model.input_sensitivities(
                 current_inputs,
                 selected_action_index
@@ -563,6 +638,9 @@ class Game:
                 self.player.rect,
                 width=2
             )
+
+        if self.show_debug_grid:
+            self._draw_sensing_coordinates(input_sensitivities)
 
         if self.show_input_impacts:
             self._draw_input_sensitivity_panel(

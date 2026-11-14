@@ -15,7 +15,7 @@ screen_height = screen_info.current_h * 0.9
 WIN_WIDTH = screen_width
 WIN_HEIGHT = screen_height
 FPS = 120
-TRAINING_GAMES_X = 4
+TRAINING_GAMES_X = 3
 TRAINING_GAMES_Y = 1
 
 # -------------------------------------------------
@@ -39,25 +39,25 @@ PLAYER_HITBOX_SCALE = 0.8            # 1.0 matches the player art; lower values 
 # -------------------------------------------------
 CAR_MIN_WIDTH = 80
 CAR_MAX_WIDTH = 180
-CAR_MIN_SPEED = 2
-CAR_MAX_SPEED = 10
-CAR_SPEED = 7                         # every standard car moves at this speed
-TRAFFIC_START_LANES_ABOVE_CAMERA = 6  # keep this many bottom rows clear of new traffic
+CAR_MIN_SPEED = 25
+CAR_MAX_SPEED = 35
+CAR_SPEED = 30                     # every standard car moves at this speed
+TRAFFIC_START_LANES_ABOVE_CAMERA = -2  # keep this many bottom rows clear of new traffic
 
 # -------------------------------------------------
 #  Trains
 # -------------------------------------------------
 TRAIN_PROBABILITY = 0.12            # base chance a traffic lane spawns a train
-TRAIN_SPEED_FACTOR = 0.5            # trains are about half as fast as cars
-TRAIN_SPEED = 14                     # every train uses this fast, fixed speed
+TRAIN_SPEED_FACTOR = 0.8            # trains are about half as fast as cars
+TRAIN_SPEED = 20                    # every train uses this fast, fixed speed
 
 # -------------------------------------------------
 #  Game‑wide parameters
 # -------------------------------------------------
 MAX_LIVES = 1
-FOLLOW_DISTANCE = 3 * LANE_HEIGHT    # keep player three lanes from the bottom
+FOLLOW_DISTANCE = 2 * LANE_HEIGHT    # keep player three lanes from the bottom
 
-CAMERA_SMOOTHING = 0.35
+CAMERA_SMOOTHING = 0.5
 
 # -------------------------------------------------
 #  Biome handling
@@ -68,7 +68,7 @@ BIOME_CHANGE_EVERY = 15 * LANE_HEIGHT   # change scenery every 15 lanes
 #  Map generation
 # -------------------------------------------------
 # Multiplies traffic-row weights; 0 disables traffic and 1 keeps the current density.
-TRAFFIC_AMOUNT = 2.0
+TRAFFIC_AMOUNT = 5.0
 
 # Each newly revealed map row is picked from this list.  ``probability`` is a
 # relative weight, so the values do not need to add up to one.  Add new row

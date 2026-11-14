@@ -171,7 +171,7 @@ class LaneManager:
             max(
                 int(camera.offset_y // LANE_HEIGHT)
                 + TRAFFIC_START_LANES_ABOVE_CAMERA,
-                player_lane + 1,
+                player_lane - 1,
             )
         )
         last_lane = max(
@@ -207,14 +207,16 @@ class LaneManager:
                     self.all_obstacles.add(train)
                 elif row["type"]["obstacle_type"] == "car":
                     car = Car(lane, row["type"]["direction"],
-                              speed=row["vehicle_speed"],
+                              speed=row["vehicle_speed"] * difficulty_factor,
                               biome=row["biome"],
                               world_width=self.width)
                     car.update_screen_rect(camera)
                     self.all_obstacles.add(car)
 
-                # reset the timer for this lane
-                self.spawn_timers[lane] = random.randint(30, 180)
+                # --- 💡 TRAFFIC AMOUNT FIX ---
+                base_delay = 180
+                cooldown = max(35, int(base_delay / (TRAFFIC_AMOUNT / 10)))
+                self.spawn_timers[lane] = cooldown + random.randint(-10, 10)
 
     # ------------------------------------------------------------------
     #  Drawing
@@ -245,11 +247,12 @@ class LaneManager:
                 # Simple horizontal rails and sleepers make track rows distinct.
                 rail_y = (top_screen_y + LANE_HEIGHT // 4,
                           top_screen_y + 3 * LANE_HEIGHT // 4)
-                for y in rail_y:
-                    pygame.draw.line(surface, (45, 45, 45), (0, y), (self.width, y), 5)
                 for x in range(0, self.width, 32):
                     pygame.draw.line(surface, (115, 75, 45),
                                      (x, rail_y[0] - 8), (x, rail_y[1] + 8), 4)
+                for y in rail_y:
+                    pygame.draw.line(surface, (45, 45, 45), (0, y), (self.width, y), 5)
+
 
         # Draw cars and trains on top of the background
         self.all_obstacles.draw(surface)

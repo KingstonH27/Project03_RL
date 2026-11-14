@@ -20,8 +20,8 @@ else:
     DEVICE = torch.device("cpu")
     DEVICE_NAME = "CPU"
 load = True
-learning_rate = 0.1
-gamma = 0.4
+learning_rate = 0.00001
+gamma = 0.6
 done = 0
 exploration_rate = 0.1
 REWARD_SCORE_INCREASE = 1

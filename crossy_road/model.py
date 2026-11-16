@@ -20,13 +20,13 @@ else:
     DEVICE = torch.device("cpu")
     DEVICE_NAME = "CPU"
 load = True
-learning_rate = 0.00001
-gamma = 0.6
+learning_rate = 0.01
+gamma = 0.9
 done = 0
-exploration_rate = 0.1
-REWARD_SCORE_INCREASE = 1
-REWARD_NO_PROGRESS = -2
-REWARD_DEATH = -10000
+exploration_rate = 0.3
+REWARD_SCORE_INCREASE = 5
+REWARD_NO_PROGRESS = -1
+REWARD_DEATH = -1000
 
 def bellman(r,q):
     Q = r + gamma * max(q) * (1 - done)
@@ -38,8 +38,8 @@ IL = SENSING_CELL_COUNT * INPUTS_PER_CELL
 inputs = np.zeros(IL)
 outputs = 5
 q = np.zeros(outputs)
-layers = 2
-neurons = 10
+layers = 3
+neurons = 32
 LEAKY_RELU_SLOPE = 0.01
 MAX_GRADIENT_NORM = 1.0
 MAX_PARAMETER_MAGNITUDE = 5.0

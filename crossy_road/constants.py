@@ -39,10 +39,10 @@ PLAYER_HITBOX_SCALE = 0.8            # 1.0 matches the player art; lower values 
 # -------------------------------------------------
 CAR_MIN_WIDTH = 80
 CAR_MAX_WIDTH = 180
-CAR_MIN_SPEED = 25
-CAR_MAX_SPEED = 35
-CAR_SPEED = 30                     # every standard car moves at this speed
-TRAFFIC_START_LANES_ABOVE_CAMERA = -2  # keep this many bottom rows clear of new traffic
+CAR_MIN_SPEED = 8
+CAR_MAX_SPEED = 8
+CAR_SPEED = 8                     # every standard car moves at this speed
+TRAFFIC_START_LANES_ABOVE_CAMERA = -1  # keep this many bottom rows clear of new traffic
 
 # -------------------------------------------------
 #  Trains
@@ -68,7 +68,7 @@ BIOME_CHANGE_EVERY = 15 * LANE_HEIGHT   # change scenery every 15 lanes
 #  Map generation
 # -------------------------------------------------
 # Multiplies traffic-row weights; 0 disables traffic and 1 keeps the current density.
-TRAFFIC_AMOUNT = 5.0
+TRAFFIC_AMOUNT = 20.0
 
 # Each newly revealed map row is picked from this list.  ``probability`` is a
 # relative weight, so the values do not need to add up to one.  Add new row

@@ -40,7 +40,7 @@ SENSING_TILE_TYPES = (
 )
 SENSING_VEHICLE_TYPES = ("car", "train")
 
-
+#Pulls player data and nearby tiles to then be passed as sensing data
 def get_player_data(env):
     """
     Return the observation plus player position, tile types, and vehicle presence.
@@ -140,7 +140,7 @@ def get_player_data(env):
         player["world_x"],
         player["world_y"]
     ]
-
+    #List of possible data to pull
     return {
         **observation,
         "current_score": observation["score"],
@@ -156,7 +156,7 @@ def get_player_data(env):
         "sensing_grid_columns": SENSING_GRID_COLUMNS,
     }
 
-
+#Lets other scripts move the player
 def move_player(env, direction):
     """
     Submit the direction with the highest Q-value,

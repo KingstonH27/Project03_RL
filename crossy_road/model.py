@@ -7,6 +7,8 @@ from .constants import (
     SENSING_GRID_COLUMNS,
     SENSING_GRID_ROWS,
 )
+
+#------------ GPU HANDLING ------------
 if torch.cuda.is_available():
     DEVICE = torch.device("cuda")
     DEVICE_NAME = torch.cuda.get_device_name(0)
@@ -19,27 +21,37 @@ elif (
 else:
     DEVICE = torch.device("cpu")
     DEVICE_NAME = "CPU"
+#--------------------------------------
+
+#------------ MODEL VARIABLES ------------
 load = True
 learning_rate = 0.01
-gamma = 0.9
+gamma = 0.6
 done = 0
 exploration_rate = 0.3
-REWARD_SCORE_INCREASE = 5
-REWARD_NO_PROGRESS = -1
-REWARD_DEATH = -1000
+REWARD_SCORE_INCREASE = 1
+REWARD_NO_PROGRESS = -2
+REWARD_DEATH = -10000
 
+#------- Model Configuration -------
+INPUTS_PER_CELL = 2
+outputs = 5
+layers = 3
+neurons = 32
+
+
+#------------ Bellman Equation ------------
 def bellman(r,q):
     Q = r + gamma * max(q) * (1 - done)
     return Q, q
 
+#------------------------------------------
 SENSING_CELL_COUNT = SENSING_GRID_ROWS * SENSING_GRID_COLUMNS
-INPUTS_PER_CELL = 2
+
 IL = SENSING_CELL_COUNT * INPUTS_PER_CELL
 inputs = np.zeros(IL)
-outputs = 5
+
 q = np.zeros(outputs)
-layers = 3
-neurons = 32
 LEAKY_RELU_SLOPE = 0.01
 MAX_GRADIENT_NORM = 1.0
 MAX_PARAMETER_MAGNITUDE = 5.0

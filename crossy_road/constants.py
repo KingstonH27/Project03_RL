@@ -15,6 +15,7 @@ screen_height = screen_info.current_h * 0.9
 WIN_WIDTH = screen_width
 WIN_HEIGHT = screen_height
 FPS = 120
+AI_UPDATE_SPEED = 0.125
 TRAINING_GAMES_X = 3
 TRAINING_GAMES_Y = 1
 

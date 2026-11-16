@@ -13,6 +13,7 @@ from .constants import (
     VIEW_LANES_AHEAD,
     SENSING_GRID_COLUMNS,
     SENSING_GRID_ROWS,
+    AI_UPDATE_SPEED
 )
 from .camera import Camera
 from .entities import Player, Train
@@ -69,7 +70,7 @@ class Game:
         self.sensitivity_scroll = 0
 
         # AI updates per rendered game frame; 0.25 means one update every four frames.
-        self.ai_speed = 0.125
+        self.ai_speed = AI_UPDATE_SPEED
         self.ai_enabled = True
         self.ai_step_accumulator = 0.0
 

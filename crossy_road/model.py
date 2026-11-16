@@ -25,10 +25,10 @@ else:
 
 #------------ MODEL VARIABLES ------------
 load = True
-learning_rate = 0.01
-gamma = 0.6
+learning_rate = 0.0001
+gamma = 0.75
 done = 0
-exploration_rate = 0.3
+exploration_rate = 0.1
 REWARD_SCORE_INCREASE = 1
 REWARD_NO_PROGRESS = -2
 REWARD_DEATH = -10000
